@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.class
+venv/
+.env
+downloads/*.db
+downloads/*_PDF.zip
+downloads/default/
+downloads/test_*/
+downloads/local_user/
+app.db

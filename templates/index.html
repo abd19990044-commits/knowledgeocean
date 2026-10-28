@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
+  <title>Knowledge Ocean — محيط المعرفة</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌊</text></svg>">
+
+  <!-- High-Priority Preloads & Connections -->
+  <link rel="preload" as="image" href="/hero.jpg" fetchpriority="high">
+  <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+  <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;800&family=Plus+Jakarta+Sans:wght@600;700&display=swap" rel="stylesheet">
+
+  <!-- Local and Fallback CSS -->
+  <link rel="stylesheet" href="/static/css/style.css">
+
+  <!-- Tailwind CSS Engine (Local with CDN fallback) -->
+  <script src="/static/js/tailwindcss.js"></script>
+  <script>
+    if (typeof tailwind === 'undefined') {
+      document.write('<script src="https://cdn.tailwindcss.com"><\/script>');
+    }
+  </script>
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              cairo: ['Cairo', 'system-ui', 'sans-serif'],
+              sans: ['Plus Jakarta Sans', 'Cairo', 'system-ui', 'sans-serif']
+            },
+            colors: {
+              brand: {
+                500: '#2563eb',
+                600: '#1d4ed8'
+              }
+            }
+          }
+        }
+      };
+    }
+  </script>
+
+  <!-- React 18, ReactDOM & HTM (100% Offline-Ready, Zero-Babel Overhead) -->
+  <script src="/static/js/react.production.min.js"></script>
+  <script>
+    if (typeof React === 'undefined') {
+      document.write('<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin><\/script>');
+    }
+  </script>
+  <script src="/static/js/react-dom.production.min.js"></script>
+  <script>
+    if (typeof ReactDOM === 'undefined') {
+      document.write('<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin><\/script>');
+    }
+  </script>
+  <script src="/static/js/htm.min.js"></script>
+  <script>
+    if (typeof htm === 'undefined') {
+      document.write('<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"><\/script>');
+    }
+  </script>
+</head>
+<body class="min-h-screen relative text-[#0c0a09] dark:text-[#fcfaf8] transition-colors duration-300">
+  
+  <!-- High-Performance Background Layer (Hardware Accelerated, No Scroll Repaint) -->
+  <div class="fixed inset-0 -z-10 bg-cover bg-center bg-no-repeat pointer-events-none" style="background-image: url('/hero.jpg'); transform: translateZ(0); will-change: transform;">
+    <div class="absolute inset-0 bg-stone-900/30 dark:bg-black/60 transition-colors duration-200"></div>
+  </div>
+
+  <!-- Server Connection & Single-Instance Heartbeat Manager -->
+  <div id="server-status-banner" class="hidden fixed top-4 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 rounded-xl shadow-2xl text-xs sm:text-sm font-medium transition-all duration-300 flex items-center gap-2.5 pointer-events-auto"></div>
+
+  <script>
+    (function() {
+      // Robust client heartbeat & reconnection manager
+      let isServerAlive = true;
+      let failedAttempts = 0;
+      const banner = document.getElementById('server-status-banner');
+      const tabId = 'tab_' + Math.random().toString(36).substring(2, 9);
+
+      function updateBanner(state, message) {
+        if (!banner) return;
+        if (state === 'hidden') {
+          banner.classList.add('hidden');
+          return;
+        }
+        banner.classList.remove('hidden');
+        if (state === 'offline') {
+          banner.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 rounded-xl shadow-2xl text-xs sm:text-sm font-medium transition-all duration-300 flex items-center gap-2.5 bg-amber-600/90 text-white backdrop-blur-md border border-amber-400/40 animate-pulse';
+          banner.innerHTML = '<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> <span>' + message + '</span>';
+        } else if (state === 'reconnected') {
+          banner.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 rounded-xl shadow-2xl text-xs sm:text-sm font-medium transition-all duration-300 flex items-center gap-2.5 bg-emerald-600/95 text-white backdrop-blur-md border border-emerald-400/40 shadow-emerald-500/20';
+          banner.innerHTML = '<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> <span>' + message + '</span>';
+          setTimeout(() => {
+            if (isServerAlive) updateBanner('hidden');
+          }, 2500);
+        }
+      }
+
+      async function sendHeartbeat() {
+        try {
+          const res = await fetch('/api/heartbeat?tab_id=' + tabId, {
+            method: 'GET',
+            cache: 'no-store',
+            keepalive: true
+          });
+          if (res.ok) {
+            failedAttempts = 0;
+            if (!isServerAlive) {
+              isServerAlive = true;
+              updateBanner('reconnected', 'تم استعادة الاتصال بخادم محيط المعرفة بنجاح!');
+            }
+          } else {
+            handleFailure();
+          }
+        } catch (e) {
+          handleFailure();
+        }
+      }
+
+      function handleFailure() {
+        failedAttempts++;
+        if (failedAttempts >= 3 && isServerAlive) {
+          isServerAlive = false;
+          const msg = (window.__IS_LOCAL_INSTANCE__)
+            ? 'خادم محيط المعرفة المحلي متوقف حالياً. عند تشغيل run_local.bat ستعمل الصفحة تلقائياً.'
+            : 'جاري محاولة إعادة الاتصال بالخادم الأكاديمي... / Reconnecting to Knowledge Ocean server...';
+          updateBanner('offline', msg);
+        }
+      }
+
+      // Initial ping immediately
+      sendHeartbeat();
+      // Continuous ping every 4 seconds
+      setInterval(sendHeartbeat, 4000);
+    })();
+  </script>
+
+  <!-- Application Root Mount Point -->
+  <div id="root"></div>
+
+  <noscript>
+    <div style="padding: 20px; text-align: center; font-family: sans-serif;">
+      <h3>محيط المعرفة - Knowledge Ocean</h3>
+      <p>Developed by ABDULSALAM S. HASAN</p>
+      <p>Please enable JavaScript to use Knowledge Ocean / يرجى تفعيل JavaScript لتشغيل المنصة الأكاديمية.</p>
+    </div>
+  </noscript>
+
+  <!-- Main Application Script (Pure ES6, Pre-Compiled, Zero Babel) -->
+  <script src="/static/js/app.js?v=20260915_13"></script>
+</body>
+</html>
