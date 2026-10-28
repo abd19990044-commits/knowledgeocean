@@ -47,11 +47,11 @@ class ProductionHTTPTests(unittest.TestCase):
             issue_session(cookie_response, "ownerabcdef123456", secure=True)
             cookie_pair = cookie_response.headers["set-cookie"].split(";", 1)[0]
             key, value = cookie_pair.split("=", 1)
-            self.client.cookies.set(key, value, domain="testserver", path="/")
-            allowed = self.client.get("/download/ownerabcdef123456/test.pdf")
+            # Explicit Cookie header bypasses httpx domain-policy differences for testserver.
+            allowed = self.client.get("/download/ownerabcdef123456/test.pdf", headers={"Cookie": cookie_pair})
             self.assertEqual(allowed.status_code, 200)
             self.assertEqual(allowed.content, b"%PDF-1.4\nTEST")
-            wrong = self.client.get("/download/otheruser12345678/test.pdf")
+            wrong = self.client.get("/download/otheruser12345678/test.pdf", headers={"Cookie": cookie_pair})
             self.assertEqual(wrong.status_code, 403)
 
     def test_cancel_route_is_not_get(self):
