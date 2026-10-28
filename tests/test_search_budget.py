@@ -1,7 +1,6 @@
 """Result-count budgets and five-minute matching inactivity, without waiting."""
 from pathlib import Path
 import tempfile
-import time
 import unittest
 from unittest.mock import patch
 
@@ -11,7 +10,8 @@ from models import CanonicalPaper
 
 class Clock:
     def __init__(self):
-        self.now = time.monotonic()
+        # Exact test seconds avoid rounding changes across runner uptimes.
+        self.now = 1_000_000.0
 
     def __call__(self):
         return self.now
