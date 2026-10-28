@@ -1013,6 +1013,8 @@ def _cleanup_task_files(user_space, safe_query="", ts="", pdf_files=None, pdf_zi
 def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=False, download_fulltext=False, guest_ip="", guest_fp="", is_other=False, guest_token="", search_scope="all", doc_type_filter="all", **kwargs):
     if query:
         query = normalize_boolean_query(query.strip())
+    queued_at = time.monotonic()
+    max_queue_wait = max(20, min(180, int(os.environ.get("SEARCH_QUEUE_MAX_SECONDS", "75"))))
     global PREMIUM_USERS_COUNT
     if not is_guest:
         with PREMIUM_LOCK:
@@ -1031,6 +1033,13 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
                     GUEST_QUEUE.append(task_id)
 
         while True:
+            if time.monotonic() - queued_at > max_queue_wait:
+                _set_task(task_id, status="error", error="انتهت مهلة الانتظار في الطابور؛ حاول مجددًا لاحقًا.", message="انتهت مهلة الانتظار في الطابور.")
+                with QUEUE_LOCK:
+                    if task_id in GUEST_QUEUE:
+                        GUEST_QUEUE.remove(task_id)
+                    ACTIVE_GUESTS.discard(task_id)
+                return
             if task_id in CANCELLED_TASKS:
                 with QUEUE_LOCK:
                     if task_id in GUEST_QUEUE:
