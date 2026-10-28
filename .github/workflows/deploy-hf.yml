@@ -1,0 +1,68 @@
+name: Deploy KnowledgeOcean to Hugging Face Space
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-knowledgeocean
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Verify and upload to HF Space
+    runs-on: ubuntu-latest
+    environment: HF_TOKEN
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install dependencies for validation and upload
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt httpx==0.28.1 huggingface_hub==0.36.0
+      - name: Run regression suite
+        run: |
+          python -m compileall -q app.py access_control.py models.py providers.py network.py citations.py
+          python -m unittest discover -s tests -p 'test_*.py'
+      - name: Check required secret and upload application
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+          token = os.environ.get("HF_TOKEN", "").strip()
+          if not token:
+              raise SystemExit("HF_TOKEN environment secret is missing")
+          api = HfApi(token=token)
+          repo_id = "salam1234561/KnowledgeOcean"
+          info = api.repo_info(repo_id=repo_id, repo_type="space")
+          print("Space:", repo_id, "SHA before:", info.sha)
+          paths = [
+              "Dockerfile",
+              "app.py", "access_control.py", "citations.py", "config_loader.py",
+              "database.py", "dedup.py", "download_research.py", "identifiers.py",
+              "models.py", "network.py", "providers.py", "query_parser.py",
+              "ranking.py", "scholarly_registry.py",
+              "requirements.txt", "requirements-fulltext.txt",
+              "static/**", "templates/**", "fonts/**",
+          ]
+          # Preserve README.md in the Space: it contains the YAML sdk: docker metadata.
+          # Never upload config.txt, secret files or GitHub automation definitions.
+          api.upload_folder(
+              repo_id=repo_id, repo_type="space", folder_path=".",
+              allow_patterns=paths,
+              ignore_patterns=["**/.git/**", "**/.github/**", "**/__pycache__/**", "**/*.pyc"],
+              commit_message="Deploy verified KnowledgeOcean from GitHub Actions"
+          )
+          state = api.get_space_runtime(repo_id=repo_id)
+          print("Space stage after upload:", state.stage)
+          print("Space URL: https://huggingface.co/spaces/" + repo_id)
+          PY
