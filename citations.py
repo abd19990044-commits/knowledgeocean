@@ -113,6 +113,17 @@ def format_apa_7th(paper: dict, bold_volume: bool = True, output_format: str = "
     pages = str(paper.get('pages') or paper.get('page') or paper.get('article_number') or paper.get('article_no') or '').strip()
     doi = str(paper.get('doi') or '').strip()
 
+    if output_format == "html":
+        # Metadata is untrusted (Crossref/OpenAlex/etc.); escape before adding our HTML tags.
+        authors_clause = html.escape(authors_clause, quote=True)
+        year = html.escape(year, quote=True)
+        title_clause = html.escape(title_clause, quote=True)
+        journal = html.escape(journal, quote=True)
+        volume = html.escape(volume, quote=True)
+        issue = html.escape(issue, quote=True)
+        pages = html.escape(pages, quote=True)
+        doi = html.escape(doi, quote=True)
+
     if volume:
         volume = re.sub(r'^(?:vol(?:ume)?|v)?[\s.:#]*', '', volume, flags=re.IGNORECASE).strip()
 
@@ -180,6 +191,7 @@ def format_apa_7th_plain(paper: dict) -> str:
 
 def apa_to_html(apa_md: str) -> str:
     if not apa_md: return ""
+    apa_md = html.escape(apa_md, quote=True)
     s = re.sub(r'\*\*(.+?)\*\*', r'<b style="font-weight: bold;">\1</b>', apa_md)
     s = re.sub(r'\*(.+?)\*', r'<i style="font-style: italic;">\1</i>', s)
     s = re.sub(r'(https?://doi\.org/[^\s]+)', r'<a href="\1" style="color: #0563C1; text-decoration: underline;">\1</a>', s)
