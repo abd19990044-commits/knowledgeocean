@@ -1810,7 +1810,7 @@ async def get_settings(request: Request):
 
 @app.post("/api/settings")
 async def save_settings(request: Request):
-    return {"status": "success", "message": "تم حفظ الإعدادات بنجاح"}
+    raise HTTPException(status_code=403, detail="Runtime settings are read-only. Configure secrets in the deployment environment.")
 
 @app.head("/", include_in_schema=False)
 async def head_root():
@@ -1867,13 +1867,14 @@ async def start_search(
             db_record_auth_attempt(ip, success=True)
 
     clean_guest_token = (guest_token or "").strip() or request.headers.get("X-Guest-Token", "").strip()
-    is_vip = verify_password(password)
-    is_other = verify_other_password(password)
+    owner_session = session_owner(request)
+    is_vip = verify_password(password) or bool(owner_session and any(hmac.compare_digest(owner_session, user_hash_for(p)) for p in APP_PASSWORDS))
+    is_other = (not is_vip) and (verify_other_password(password) or bool(owner_session and any(hmac.compare_digest(owner_session, user_hash_for(p)) for p in OTHER_PASSWORDS)))
     is_guest = not is_vip
 
     # On local instances, grant full open access with zero restrictions and without requiring any passcode!
     if is_local_instance(request):
-        uh = user_hash_for(password) if (password and is_vip) else "local_user"
+        uh = (user_hash_for(password) if password and verify_password(password) else owner_session) if is_vip else "local_user"
     else:
         # Users with other_password are in normal queue, but have 250 daily searches renewing every day
         if is_guest:
@@ -1925,7 +1926,7 @@ async def start_search(
                 if limit > 50:
                     limit = 50
         else:
-            uh = user_hash_for(password)
+            uh = user_hash_for(password) if password and verify_password(password) else owner_session
 
     if not query.strip():
         return JSONResponse(status_code=400, content={"error": "مصطلح البحث فارغ."})
@@ -3069,8 +3070,8 @@ async def fetch_history_data(request: Request, password: str = None):
         raise HTTPException(403, "Owner session required")
     candidate_uhs = {authorized_hash} if authorized_hash else {"local_user"}
     spaces = []
-    # If password is VIP / secondary, add its private space
-    if pwd and (verify_password(pwd) or verify_other_password(pwd)):
+    # Only the authenticated owner workspace may be scanned.
+    if pwd and (verify_password(pwd) or verify_other_password(pwd)) and authorized_hash == user_hash_for(pwd):
         pwd_space = os.path.join(DOWNLOAD_DIR, user_hash_for(pwd))
         if pwd_space not in spaces:
             spaces.append(pwd_space)
