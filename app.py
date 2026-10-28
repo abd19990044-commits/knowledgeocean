@@ -1914,7 +1914,9 @@ async def start_search(
                         "quota_limit": quota_limit
                     }
                 )
-            if clean_guest_token:
+            if is_other:
+                uh = user_hash_for(password) if password and verify_other_password(password) else owner_session
+            elif clean_guest_token:
                 uh = hashlib.sha256(f"guest_{clean_guest_token}_{browser_fp}".encode()).hexdigest()[:16]
             else:
                 uh = hashlib.sha256(f"{ip}_{browser_fp}".encode()).hexdigest()[:16]
