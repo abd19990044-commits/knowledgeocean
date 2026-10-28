@@ -94,12 +94,12 @@ logging.getLogger("requests").setLevel(logging.ERROR)
 RAW_PASSWORDS = os.environ.get("APP_PASSWORD", "").strip()
 if not RAW_PASSWORDS:
     APP_PASSWORDS = set()
-    log.info("ℹ️ لم يتم ضبط APP_PASSWORD — تم تفعيل الرمز الافتراضي (123).")
+    log.warning("APP_PASSWORD not configured: VIP access and Scopus searches are disabled until a secret is set.")
 else:
     APP_PASSWORDS = {p.strip() for p in RAW_PASSWORDS.split(",") if p.strip()}
 
 # Secondary auto-renewing password (other_password) allowing 250 daily quota in standard queue
-DEFAULT_OTHER_PASSWORDS = {"other_password", "other_pasuard", "guest100", "renew100", "guest250", "renew250", "1234"}
+DEFAULT_OTHER_PASSWORDS = set()  # Legacy constant: no built-in secondary access codes
 RAW_OTHER_PASSWORDS = os.environ.get("OTHER_PASSWORD", "").strip() or os.environ.get("OTHER_PASUARD", "").strip()
 if not RAW_OTHER_PASSWORDS:
     OTHER_PASSWORDS = set()
