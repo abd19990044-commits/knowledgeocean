@@ -37,6 +37,7 @@ import requests
 import xml.etree.ElementTree as ET
 
 from fastapi import FastAPI, Form, Request, HTTPException
+from access_control import issue_session, revoke_session, session_owner, require_owner, require_same_origin
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -92,7 +93,7 @@ logging.getLogger("requests").setLevel(logging.ERROR)
 
 RAW_PASSWORDS = os.environ.get("APP_PASSWORD", "").strip()
 if not RAW_PASSWORDS:
-    APP_PASSWORDS = {"123"}
+    APP_PASSWORDS = set()
     log.info("ℹ️ لم يتم ضبط APP_PASSWORD — تم تفعيل الرمز الافتراضي (123).")
 else:
     APP_PASSWORDS = {p.strip() for p in RAW_PASSWORDS.split(",") if p.strip()}
@@ -101,9 +102,9 @@ else:
 DEFAULT_OTHER_PASSWORDS = {"other_password", "other_pasuard", "guest100", "renew100", "guest250", "renew250", "1234"}
 RAW_OTHER_PASSWORDS = os.environ.get("OTHER_PASSWORD", "").strip() or os.environ.get("OTHER_PASUARD", "").strip()
 if not RAW_OTHER_PASSWORDS:
-    OTHER_PASSWORDS = DEFAULT_OTHER_PASSWORDS
+    OTHER_PASSWORDS = set()
 else:
-    OTHER_PASSWORDS = {p.strip() for p in RAW_OTHER_PASSWORDS.split(",") if p.strip()} | DEFAULT_OTHER_PASSWORDS
+    OTHER_PASSWORDS = {p.strip() for p in RAW_OTHER_PASSWORDS.split(",") if p.strip()}
 
 def verify_password(pwd: str) -> bool:
     """Safe constant-time password verification strictly prioritizing secrets over default 123."""
@@ -113,7 +114,7 @@ def verify_password(pwd: str) -> bool:
     if raw_passwords:
         passwords = {p.strip() for p in raw_passwords.split(",") if p.strip()}
     else:
-        passwords = {"123"}
+        passwords = set()
     clean_pwd = pwd.strip().encode('utf-8')
     return any(hmac.compare_digest(clean_pwd, p.encode('utf-8')) for p in passwords)
 
@@ -274,6 +275,8 @@ def is_local_instance(request: Optional[Request] = None) -> bool:
     False if deployed to Hugging Face Spaces or public cloud.
     """
     if os.environ.get("SPACE_ID") or os.environ.get("HF_SPACE"):
+        return False
+    if os.environ.get("LOCAL_INSTANCE", "0") != "1" and os.environ.get("IS_LOCAL", "0") != "1":
         return False
     if os.environ.get("LOCAL_INSTANCE", "0") == "1" or os.environ.get("IS_LOCAL", "0") == "1":
         return True
@@ -1206,7 +1209,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                                     continue
 
                                 # P0.3 & P2: Boolean and natural query matching
-                                if not matches_target_query(query, p.title, p.abstract, require_title=require_title, doi=p.doi):
+                                if mode != "author" and not matches_target_query(query, p.title, p.abstract, require_title=require_title, doi=p.doi):
                                     continue
 
                                 # P1.3 & P1.4: Add or merge into canonical index
@@ -1348,6 +1351,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         else:
             peer = [p for p in final_papers if not p.get('is_preprint')]
             preprints = [p for p in final_papers if p.get('is_preprint')]
+
+        if not final_papers:
+            raise ValueError("No papers remain after document-type and scope filtering; broaden filters.")
 
         if is_guest and len(final_papers) < target_limit and guest_ip and guest_fp:
             unused_papers = target_limit - len(final_papers)
@@ -1707,7 +1713,7 @@ async def api_login(request: Request):
 
     if is_vip:
         db_record_auth_attempt(ip, success=True)
-        return JSONResponse({
+        response = JSONResponse({
             "status": "success",
             "tier": "vip",
             "is_vip": True,
@@ -1715,9 +1721,11 @@ async def api_login(request: Request):
             "quota": "unlimited",
             "message": "تم تسجيل الدخول بنجاح! حساب VIP نشط (استخراج شامل وبلا حدود)."
         })
+        issue_session(response, user_hash_for(password), secure=request.url.scheme == "https")
+        return response
     elif is_other:
         db_record_auth_attempt(ip, success=True)
-        return JSONResponse({
+        response = JSONResponse({
             "status": "success",
             "tier": "secondary",
             "is_vip": False,
@@ -1725,6 +1733,8 @@ async def api_login(request: Request):
             "quota": SECONDARY_SEARCH_QUOTA,
             "message": f"تم تفعيل الرمز الثانوي بنجاح! حصة يومية متجددة سعتها {SECONDARY_SEARCH_QUOTA} بحثاً (تتجدد 12:00 ص بتوقيت بغداد)."
         })
+        issue_session(response, user_hash_for(password), secure=request.url.scheme == "https")
+        return response
     else:
         # Invalid attempt
         banned, attempts_left, rem = db_record_auth_attempt(ip, success=False)
@@ -1750,12 +1760,19 @@ async def api_login(request: Request):
 
 
 
+@app.post("/api/logout")
+async def api_logout(request: Request):
+    require_same_origin(request)
+    response = JSONResponse({"ok": True})
+    revoke_session(response)
+    return response
+
 @app.get("/hero.jpg")
 @app.get("/hero.webp")
 async def get_hero_image():
     for name in ["templates/hero.webp", "templates/hero.jpg", "hero.webp", "hero.jpg", "static/hero.jpg"]:
         if os.path.exists(name):
-            media = "image/webp" if (name.endswith(".webp") or name.endswith(".jpg")) else "image/jpeg"
+            media = "image/webp" if name.endswith(".webp") else "image/jpeg"
             return FileResponse(
                 name,
                 media_type=media,
@@ -1801,6 +1818,7 @@ async def start_search(
     include_abstracts: bool = Form(False), download_fulltext: bool = Form(False), guest_token: str = Form(""),
     search_scope: str = Form("all"), doc_type_filter: str = Form("all")
 ):
+    require_same_origin(request)
     with_abstracts = bool(include_abstracts or download_fulltext)
     ip, browser_fp = get_fingerprint(request)
     is_banned, ban_remaining = db_check_ip_ban(ip)
@@ -1908,7 +1926,7 @@ async def start_search(
         return JSONResponse(status_code=400, content={"error": "مصطلح البحث فارغ."})
     if len(query.strip()) < 3:
         return JSONResponse(status_code=400, content={"error": "مصطلح البحث قصير جداً (3 أحرف على الأقل)."})
-    if is_guest and db_source == "elsevier":
+    if db_source == "elsevier" and not is_vip:
         return JSONResponse(status_code=403, content={"error": "قاعدة بيانات Scopus (Elsevier) غير متاحة للضيوف وتتطلب إدخال مفتاح الوصول (VIP) أو استخدام النسخة المحلية."})
     if mode == "author" and any(ord(c) > 127 for c in query):
         return JSONResponse(status_code=400, content={"error": "في وضع الباحث، اكتب الاسم بالأحرف الإنجليزية فقط."})
@@ -1921,6 +1939,8 @@ async def start_search(
               guest_ip=ip if is_guest else "", guest_fp=browser_fp if is_guest else "",
               guest_token=clean_guest_token if is_guest else "",
               started_at=time.time())
+    response = JSONResponse({"task_id": task_id, "user_hash": uh})
+    issue_session(response, uh, secure=request.url.scheme == "https")
     threading.Thread(target=managed_pipeline_wrapper, kwargs={
         "query": query.strip(),
         "mode": mode,
@@ -1935,7 +1955,7 @@ async def start_search(
         "include_preprint": include_preprint,
         "is_guest": is_guest,
         "include_abstracts": with_abstracts,
-        "download_fulltext": False,
+        "download_fulltext": download_fulltext,
         "guest_ip": ip if is_guest else "",
         "guest_fp": browser_fp if is_guest else "",
         "is_other": is_other if is_guest else False,
@@ -1943,10 +1963,15 @@ async def start_search(
         "search_scope": search_scope,
         "doc_type_filter": doc_type_filter
     }, daemon=True).start()
-    return {"task_id": task_id, "user_hash": uh}
+    return response
 
 @app.api_route("/api/cancel/{task_id}", methods=["GET", "POST"])
-async def cancel_task(task_id: str):
+async def cancel_task(task_id: str, request: Request):
+    require_same_origin(request)
+    task_info = TASKS.get(task_id) or db_get_task(task_id)
+    if not task_info:
+        raise HTTPException(404, "Task not found")
+    require_owner(request, task_info.get("user_hash", ""), local=is_local_instance(request))
     CANCELLED_TASKS.add(task_id)
     in_q = False
     with QUEUE_LOCK:
@@ -1986,13 +2011,14 @@ async def cancel_task(task_id: str):
     }
 
 @app.get("/api/status/{task_id}")
-async def get_status(task_id: str):
+async def get_status(task_id: str, request: Request):
     with TASKS_LOCK:
         task = TASKS.get(task_id)
     if task is None:
         task = db_get_task(task_id)
     if task is None:
         raise HTTPException(404, "المهمة غير موجودة.")
+    require_owner(request, task.get("user_hash", ""), local=is_local_instance(request))
     return task
 
 @app.api_route("/api/doi-lookup", methods=["GET", "POST"])
@@ -3033,6 +3059,10 @@ async def fetch_history_data(request: Request, password: str = None):
         if t_uh and not ("/" in t_uh or "\\" in t_uh or ".." in t_uh):
             candidate_uhs.add(t_uh)
 
+    authorized_hash = session_owner(request)
+    if not authorized_hash and not is_local_instance(request):
+        raise HTTPException(403, "Owner session required")
+    candidate_uhs = {authorized_hash} if authorized_hash else {"local_user"}
     spaces = []
     # If password is VIP / secondary, add its private space
     if pwd and (verify_password(pwd) or verify_other_password(pwd)):
@@ -3146,6 +3176,10 @@ async def load_history_entry(request: Request, filename: str, user_hash: str = "
                 if d not in candidate_hashes and os.path.isdir(os.path.join(DOWNLOAD_DIR, d)):
                     candidate_hashes.append(d)
 
+    authorized_hash = session_owner(request)
+    if not authorized_hash and not is_local_instance(request):
+        raise HTTPException(403, "Owner session required")
+    candidate_hashes = [authorized_hash] if authorized_hash else ["local_user"]
     target_fp = None
     target_json_fp = None
     found_uh = ""
@@ -3187,6 +3221,7 @@ async def load_history_entry(request: Request, filename: str, user_hash: str = "
 
 @app.api_route("/api/delete", methods=["POST", "DELETE"])
 async def delete_file(request: Request):
+    require_same_origin(request)
     filename = ""
     password = ""
     user_hash = ""
@@ -3261,6 +3296,10 @@ async def delete_file(request: Request):
                 if d not in candidate_hashes and os.path.isdir(os.path.join(DOWNLOAD_DIR, d)):
                     candidate_hashes.append(d)
 
+    authorized_hash = session_owner(request)
+    if not authorized_hash and not is_local_instance(request):
+        raise HTTPException(403, "Owner session required")
+    candidate_hashes = [authorized_hash] if authorized_hash else ["local_user"]
     deleted = False
     base_dir = os.path.abspath(DOWNLOAD_DIR)
     for uh in candidate_hashes:
@@ -3287,6 +3326,7 @@ async def delete_file(request: Request):
 
 @app.get("/download/{user_hash}/{filename}")
 async def download_file(user_hash: str, filename: str, request: Request, password: Optional[str] = None):
+    require_owner(request, user_hash, local=is_local_instance(request))
     if "/" in filename or "\\" in filename or ".." in filename or ".." in user_hash or "/" in user_hash or "\\" in user_hash:
         raise HTTPException(400, "اسم ملف غير صالح.")
 
