@@ -96,7 +96,7 @@ if not RAW_PASSWORDS:
     APP_PASSWORDS = set()
     log.warning("APP_PASSWORD not configured: VIP access and Scopus searches are disabled until a secret is set.")
 else:
-    APP_PASSWORDS = {p for p in re.split(r"[,،;؛\r\n]+", RAW_PASSWORDS) if (p := p.strip())}
+    APP_PASSWORDS = {part.strip() for part in re.split(r"[,،;؛\r\n]+", RAW_PASSWORDS) if part.strip()}
 
 # Secondary auto-renewing password (other_password) allowing 250 daily quota in standard queue
 DEFAULT_OTHER_PASSWORDS = set()  # Legacy constant: no built-in secondary access codes
@@ -104,7 +104,7 @@ RAW_OTHER_PASSWORDS = os.environ.get("OTHER_PASSWORD", "").strip() or os.environ
 if not RAW_OTHER_PASSWORDS:
     OTHER_PASSWORDS = set()
 else:
-    OTHER_PASSWORDS = {p for p in re.split(r"[,،;؛\r\n]+", RAW_OTHER_PASSWORDS) if (p := p.strip())}
+    OTHER_PASSWORDS = {part.strip() for part in re.split(r"[,،;؛\r\n]+", RAW_OTHER_PASSWORDS) if part.strip()}
 
 def verify_password(pwd: str) -> bool:
     """Safe constant-time password verification strictly prioritizing secrets over default 123."""
@@ -112,7 +112,7 @@ def verify_password(pwd: str) -> bool:
         return False
     raw_passwords = os.environ.get("APP_PASSWORD", "").strip()
     if raw_passwords:
-        passwords = {p for p in re.split(r"[,،;؛\r\n]+", raw_passwords) if (p := p.strip())}
+        passwords = {part.strip() for part in re.split(r"[,،;؛\r\n]+", raw_passwords) if part.strip()}
     else:
         passwords = set()
     clean_pwd = pwd.strip().encode('utf-8')
