@@ -1612,7 +1612,10 @@ async def api_active_task(request: Request, password: str = "", guest_token: str
     clean_gt = (guest_token or "").strip() or request.headers.get("X-Guest-Token", "").strip()
     ip, browser_fp = get_fingerprint(request)
     uh = hashlib.sha256(f"guest_{clean_gt}_{browser_fp}".encode()).hexdigest()[:16] if clean_gt else hashlib.sha256(f"{ip}_{browser_fp}".encode()).hexdigest()[:16]
-    return find_active_task_for_key(password, uh, clean_gt)
+    owner = session_owner(request)
+    if not owner and not is_local_instance(request):
+        return {"has_active_task": False}
+    return find_active_task_for_key("", owner or "local_user", "")
 
 @app.get("/api/guest-quota")
 async def api_guest_quota(request: Request, password: str = "", guest_token: str = ""):
@@ -1637,9 +1640,11 @@ async def api_guest_quota(request: Request, password: str = "", guest_token: str
         }
 
     uh = hashlib.sha256(f"guest_{clean_gt}_{browser_fp}".encode()).hexdigest()[:16] if clean_gt else hashlib.sha256(f"{ip}_{browser_fp}".encode()).hexdigest()[:16]
-    active_task = find_active_task_for_key(password, uh, clean_gt)
+    owner = session_owner(request)
+    active_task = find_active_task_for_key("", owner or "local_user", "") if (owner or is_local_instance(request)) else {"has_active_task": False}
 
-    is_vip = verify_password(password)
+    session_uh = session_owner(request)
+    is_vip = verify_password(password) or bool(session_uh and any(hmac.compare_digest(session_uh, user_hash_for(p)) for p in APP_PASSWORDS))
     if is_vip or is_local_instance(request):
         return {
             "ok": True,
@@ -1652,7 +1657,7 @@ async def api_guest_quota(request: Request, password: str = "", guest_token: str
             "auto_renew": False,
             "active_task": active_task
         }
-    is_other = verify_other_password(password)
+    is_other = verify_other_password(password) or bool(session_uh and any(hmac.compare_digest(session_uh, user_hash_for(p)) for p in OTHER_PASSWORDS))
     quota_limit = SECONDARY_SEARCH_QUOTA if is_other else GUEST_SEARCH_QUOTA
     rem = get_guest_remaining_quota(ip, browser_fp, is_other=is_other, guest_token=clean_gt)
     return {
