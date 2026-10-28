@@ -1104,6 +1104,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
             active = [k for k in book_priority if k in FETCH_BATCH_MAP]
         elif db_source == 'all':
             fast_priority = ['verified_literature', 'pubmed', 'crossref', 'openalex', 'europepmc', 'doaj', 'semanticscholar', 'core', 'zenodo']
+            # The licensed Elsevier API is included in comprehensive searches only for VIP.
+            if not is_guest and (os.environ.get('ELSEVIER_API_KEY', '').strip() or ELSEVIER_API_KEY):
+                fast_priority.append('elsevier')
             if search_scope != 'papers':
                 fast_priority.extend(['googlebooks', 'openlibrary'])
             if is_include_preprint:
