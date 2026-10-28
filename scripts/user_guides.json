@@ -179,7 +179,7 @@
         ],
         [
           "إنهاء الجلسة",
-          "تُنزّل التقارير المطلوبة وتُراجع بيانات الاستشهادات، ثم يُستخدم زر تسجيل الخروج أعلى الموقع لإنهاء الجلسة. ويمكن تنزيل النسخة العربية أو الإنكليزية من الدليل بصورة مستقلة عن لغة واجهة الموقع."
+          "تُنزّل التقارير المطلوبة وتُراجع بيانات الاستشهادات، ثم يُستخدم زر تسجيل الخروج أعلى الموقع لإنهاء الجلسة. تتبع لغة الدليل لغة الواجهة افتراضياً عند فتح الصفحة أو تبديل لغتها، مع إتاحة اختيار العربية أو الإنكليزية يدوياً."
         ]
       ]
     ]
@@ -364,7 +364,7 @@
         ],
         [
           "Ending a session",
-          "Download required reports and verify citations, then use Log Out in the page header to end the session. The Arabic and English handbooks can be selected independently of the interface language."
+          "Download required reports and verify citations, then use Log Out in the page header to end the session. The handbook defaults to the interface language when the page opens or its language changes; Arabic or English may also be selected manually."
         ]
       ]
     ]

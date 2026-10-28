@@ -672,13 +672,8 @@
     });
 
     const t = I18N[lang] || I18N.en;
-    const [guideLanguage, setGuideLanguage] = useState(() => {
-      try {
-        const saved = localStorage.getItem("ko_guide_language");
-        if (saved === "ar" || saved === "en") return saved;
-      } catch (_) {}
-      return lang;
-    });
+    const [guideLanguage, setGuideLanguage] = useState(lang);
+    useEffect(() => { setGuideLanguage(lang); }, [lang]);
 
     // Guest Quota Management (50 standard searches or 25 with summaries for guests; 250 daily for secondary key)
     const [password, setPassword] = useState(() => {
@@ -1859,12 +1854,11 @@
               <label htmlFor="user-guide-language" className="text-xs font-bold">${lang === "ar" ? "لغة الدليل" : "Guide language"}</label>
               <select id="user-guide-language" value=${guideLanguage} onChange=${(e) => {
                 setGuideLanguage(e.target.value);
-                try { localStorage.setItem("ko_guide_language", e.target.value); } catch (_) {}
               }} className="h-10 rounded-[12px] border border-stone-300 dark:border-white/20 bg-white dark:bg-stone-950 px-3 text-sm text-stone-900 dark:text-white">
                 <option value="ar">العربية (RTL)</option>
                 <option value="en">English</option>
               </select>
-              <a id="download-user-guide" href=${`/api/user-guide/${guideLanguage}?v=20261029-2`} download=${`KnowledgeOcean_User_Guide_${guideLanguage.toUpperCase()}.pdf`} className="inline-flex items-center h-10 rounded-[12px] bg-teal-700 hover:bg-teal-800 px-4 text-white text-xs font-bold transition">
+              <a id="download-user-guide" href=${`/api/user-guide/${guideLanguage}?v=20261029-3`} download=${`KnowledgeOcean_User_Guide_${guideLanguage.toUpperCase()}.pdf`} className="inline-flex items-center h-10 rounded-[12px] bg-teal-700 hover:bg-teal-800 px-4 text-white text-xs font-bold transition">
                 ${lang === "ar" ? "تنزيل دليل الاستخدام (PDF)" : "Download User Guide (PDF)"}
               </a>
             </div>
