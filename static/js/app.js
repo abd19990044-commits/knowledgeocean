@@ -1353,7 +1353,7 @@
           setProgress(data.progress || 0);
           setStatusMsg(localizeTaskMessage(data.message || data.msg, lang));
 
-          if (data.status === "completed" || data.progress >= 100) {
+          if (data.status === "completed") {
             if (pollingRef.current) clearInterval(pollingRef.current);
             setIsSearching(false);
             setShowDownloadPanel(true);
@@ -1416,7 +1416,11 @@
           } else if (data.status === "error" || data.status === "failed") {
             if (pollingRef.current) clearInterval(pollingRef.current);
             setIsSearching(false);
-            showAlert(data.error || data.message || (lang === "ar" ? "فشلت عملية البحث" : "Search operation failed"), "error");
+            const failureMessage = data.error || data.message || (lang === "ar" ? "فشلت عملية البحث" : "Search operation failed");
+            setStatusMsg(failureMessage);
+            setProgress(0);
+            setShowDownloadPanel(false);
+            showAlert(failureMessage, "error", 9000);
           }
         } catch (err) {
           setStatusMsg(lang === "ar" ? "إعادة محاولة الاتصال بالخادم..." : "Retrying server connection...");
