@@ -75,7 +75,7 @@ import urllib.request
 import socket
 import requests
 import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# TLS verification is mandatory; do not silence certificate errors.
 from dataclasses import dataclass
 from pathlib import Path
 from functools import wraps
@@ -2132,7 +2132,7 @@ def download_stream_with_resume(
         default_headers.update(headers)
 
     s = requests.Session()
-    s.verify = False  # مرايا المقالات قد تحوي شهادات ذاتية التوقيع
+    # Always verify TLS certificates. Reject untrusted mirrors instead of accepting MITM.
 
     retries = 0
     backoff = 1.5
@@ -2850,7 +2850,7 @@ def download_one(entry: dict, base_dir: str) -> Tuple[bool, str]:
                 scihub_headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 }
-                with requests.get(url, headers=scihub_headers, verify=False, timeout=7) as r:
+                with requests.get(url, headers=scihub_headers, timeout=7) as r:
                     if r.status_code == 200 and len(r.text) > 100:
                         low_text = r.text.lower()
                         if "article is not available through sci-hub" in low_text or "article not found" in low_text:

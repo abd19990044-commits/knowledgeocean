@@ -676,7 +676,7 @@
     // Guest Quota Management (50 standard searches or 25 with summaries for guests; 250 daily for secondary key)
     const [password, setPassword] = useState(() => {
       try {
-        return localStorage.getItem("ko_access_code") || "";
+        return "";
       } catch (e) {
         return "";
       }
@@ -698,7 +698,7 @@
     const fetchQuota = async (pwd) => {
       try {
         const p = pwd !== undefined ? pwd : password;
-        const res = await fetch(`/api/guest-quota?password=${encodeURIComponent(p || "")}&guest_token=${encodeURIComponent(getOrCreateGuestToken())}`);
+        const res = await fetch("/api/guest-quota", { cache: "no-store", headers: { "X-Guest-Token": getOrCreateGuestToken() } });
         if (res.ok) {
           const d = await res.json();
           if (d.banned) {
@@ -744,7 +744,7 @@
         if (res.ok && data.status === "success") {
           setPassword(code);
           try {
-            localStorage.setItem("ko_access_code", code);
+            localStorage.removeItem("ko_access_code");
           } catch (e) {}
           setLoginSuccessMsg(data.message || (lang === "ar" ? "تم تفعيل الرمز بنجاح!" : "Access code activated successfully!"));
           setLoginError("");
@@ -781,7 +781,7 @@
       setLoginError("");
       setLoginAttemptsLeft(null);
       setLoginSuccessMsg(lang === "ar" ? "تم تسجيل الخروج بنجاح والعودة للوضع المجاني." : "Logged out successfully. Switched to guest tier.");
-      fetchQuota("");
+      fetch("/api/logout", { method: "POST" }).finally(() => fetchQuota(""));
       setTimeout(() => {
         setShowLoginModal(false);
         setLoginSuccessMsg("");
@@ -977,7 +977,11 @@
           }
           loadSettings();
         } else {
-          setSettingsStatusMsg({ type: "error", text: data.message || (lang === "ar" ? "حدث خطأ أثناء الحفظ" : "An error occurred while saving") });
+          setSettingsStatusMsg({ type: "error", text: data.detail || data.message || (lang === "ar" ? "الإعدادات تُضبط من خادم التطبيق أو Secrets" : "Configure settings in server environment / secrets") });
+          if (isFirstRun && isLocal) {
+            try { localStorage.setItem("ko_first_run_completed", "true"); } catch (_) {}
+            setShowFirstRunModal(false);
+          }
         }
       } catch (err) {
         setSettingsStatusMsg({ type: "error", text: lang === "ar" ? "تعذر الاتصال بالخادم لحفظ الإعدادات" : "Unable to connect to server to save settings" });
@@ -1286,7 +1290,7 @@
     const handleLoadSearch = async (item) => {
       try {
         showAlert(lang === "ar" ? `جاري استرجاع نتائج بحث: "${item.query || item.filename}"...` : `Loading results for: "${item.query || item.filename}"...`, "info", 2000);
-        const res = await fetch(`/api/history/load?filename=${encodeURIComponent(item.filename)}&user_hash=${encodeURIComponent(item.user_hash || "")}&guest_token=${encodeURIComponent(getOrCreateGuestToken())}`);
+        const res = await fetch(`/api/history/load?filename=${encodeURIComponent(item.filename)}`);
         if (!res.ok) {
           throw new Error(lang === "ar" ? "تعذر جلب تفاصيل البحث" : "Unable to fetch search details");
         }
@@ -1461,7 +1465,7 @@
         return;
       }
 
-      if (!isLocal && !password.trim() && dbSource === "elsevier") {
+      if (!quota.isVip && dbSource === "elsevier") {
         showAlert(lang === "ar" ? "قاعدة Scopus (Elsevier) غير متاحة للضيوف وتتطلب إدخال مفتاح الوصول (VIP) أو استخدام النسخة المحلية." : "Scopus (Elsevier) is unavailable for guests. VIP key or Local edition required.", "error");
         return;
       }
@@ -1487,7 +1491,7 @@
       form.append("year_to", yearTo);
       form.append("include_preprint", includePreprint ? "true" : "false");
       form.append("include_abstracts", includeAbstracts ? "true" : "false");
-      form.append("download_fulltext", includeAbstracts ? "true" : "false");
+      form.append("download_fulltext", "false");
       form.append("search_scope", searchScope);
       form.append("doc_type_filter", docTypeFilter);
 
