@@ -672,6 +672,13 @@
     });
 
     const t = I18N[lang] || I18N.en;
+    const [guideLanguage, setGuideLanguage] = useState(() => {
+      try {
+        const saved = localStorage.getItem("ko_guide_language");
+        if (saved === "ar" || saved === "en") return saved;
+      } catch (_) {}
+      return lang;
+    });
 
     // Guest Quota Management (50 standard searches or 25 with summaries for guests; 250 daily for secondary key)
     const [password, setPassword] = useState(() => {
@@ -684,8 +691,14 @@
     const [showAccessCode, setShowAccessCode] = useState(false);
     const [showLoginModal, setShowLoginModal] = useState(false);
     const [loginInputCode, setLoginInputCode] = useState("");
+    const [elsevierApiKey, setElsevierApiKey] = useState(() => {
+      try { return localStorage.getItem("ko_elsevier_api_key") || ""; } catch (_) { return ""; }
+    });
+    const [elsevierKeyInput, setElsevierKeyInput] = useState(elsevierApiKey);
+    const [elsevierKeyMessage, setElsevierKeyMessage] = useState("");
     const [loginShowPassword, setLoginShowPassword] = useState(false);
     const [loginLoading, setLoginLoading] = useState(false);
+    const [logoutLoading, setLogoutLoading] = useState(false);
     const [loginError, setLoginError] = useState("");
     const [loginSuccessMsg, setLoginSuccessMsg] = useState("");
     const [loginAttemptsLeft, setLoginAttemptsLeft] = useState(null);
@@ -725,7 +738,28 @@
       } catch (e) {}
     };
 
+    const saveElsevierKey = () => {
+      const key = elsevierKeyInput.trim();
+      if (key && !/^[A-Za-z0-9_-]{16,256}$/.test(key)) {
+        setElsevierKeyMessage(lang === "ar" ? "تحقق من صيغة مفتاح Elsevier؛ يجب ألا يحتوي مسافات." : "Check the Elsevier key format; spaces are not allowed.");
+        return false;
+      }
+      setElsevierApiKey(key);
+      try {
+        if (key) localStorage.setItem("ko_elsevier_api_key", key);
+        else localStorage.removeItem("ko_elsevier_api_key");
+        setElsevierKeyMessage(lang === "ar" ? (key ? "تم حفظ المفتاح في هذا المتصفح." : "تم حذف المفتاح المحفوظ.") : (key ? "Key saved in this browser." : "Saved key removed."));
+      } catch (_) {
+        setElsevierKeyMessage(lang === "ar" ? "المفتاح متاح لهذه الجلسة؛ المتصفح منع حفظه الدائم." : "Key available for this session; browser storage is unavailable.");
+      }
+      return true;
+    };
+
     const handleLogin = async (codeToSubmit) => {
+      if (elsevierKeyInput.trim() && !/^[A-Za-z0-9_-]{16,256}$/.test(elsevierKeyInput.trim())) {
+        saveElsevierKey();
+        return;
+      }
       const code = (codeToSubmit !== undefined ? codeToSubmit : loginInputCode).trim();
       if (!code) {
         setLoginError(lang === "ar" ? "يرجى إدخال رمز المرور  " : "Please enter access code ");
@@ -742,6 +776,7 @@
         });
         const data = await res.json();
         if (res.ok && data.status === "success") {
+          saveElsevierKey();
           setPassword(code);
           try {
             localStorage.removeItem("ko_access_code");
@@ -756,7 +791,7 @@
             setLoginSuccessMsg("");
           }, 1500);
         } else {
-          if (data.banned || res.status === 403) {
+          if (data.banned) {
             setIsIpBanned(true);
             setBanRemainingSec(data.remaining_seconds || 86400);
             setLoginError(data.error || (lang === "ar" ? "تم حظر هذا الـ IP لمدة 24 ساعة بسبب تكرار المحاولات الخاطئة." : "IP address banned for 24 hours."));
@@ -772,20 +807,27 @@
       }
     };
 
-    const handleLogout = () => {
-      setPassword("");
+    const handleLogout = async () => {
+      if (logoutLoading) return;
+      setLogoutLoading(true);
       try {
-        localStorage.removeItem("ko_access_code");
-      } catch (e) {}
-      setLoginInputCode("");
-      setLoginError("");
-      setLoginAttemptsLeft(null);
-      setLoginSuccessMsg(lang === "ar" ? "تم تسجيل الخروج بنجاح والعودة للوضع المجاني." : "Logged out successfully. Switched to guest tier.");
-      fetch("/api/logout", { method: "POST" }).finally(() => fetchQuota(""));
-      setTimeout(() => {
+        const response = await fetch("/api/logout", { method: "POST" });
+        if (!response.ok) throw new Error("Logout failed");
+        setPassword("");
+        try { localStorage.removeItem("ko_access_code"); } catch (_) {}
+        setQuota(q => ({ ...q, isVip: false, isOther: false, autoRenew: false }));
+        setLoginInputCode("");
+        setLoginError("");
+        setLoginAttemptsLeft(null);
         setShowLoginModal(false);
         setLoginSuccessMsg("");
-      }, 1200);
+        setAlertInfo({ text: lang === "ar" ? "تم تسجيل الخروج والعودة لوضع الضيف. يبقى مفتاح Elsevier المحفوظ حتى تحذفه من نافذة الدخول." : "Signed out and returned to guest mode. Your saved Elsevier key remains until you remove it in Sign In.", type: "info" });
+        await fetchQuota("");
+      } catch (_) {
+        setAlertInfo({ text: lang === "ar" ? "تعذر تسجيل الخروج. تحقق من الاتصال وأعد المحاولة." : "Could not sign out. Check your connection and try again.", type: "error" });
+      } finally {
+        setLogoutLoading(false);
+      }
     };
 
     useEffect(() => {
@@ -1479,6 +1521,7 @@
 
       const form = new FormData();
       form.append("password", password.trim());
+      if (quota.isVip && elsevierApiKey) form.append("elsevier_api_key", elsevierApiKey);
       form.append("guest_token", getOrCreateGuestToken());
       form.append("query", query.trim());
       form.append("mode", mode);
@@ -1722,6 +1765,20 @@
                 </span>
               </button>
 
+              ${password || quota.isVip || quota.isOther ? html`
+                <button
+                  id="logout-btn"
+                  type="button"
+                  aria-label=${lang === "ar" ? "تسجيل الخروج" : "Log Out"}
+                  disabled=${logoutLoading}
+                  onClick=${handleLogout}
+                  className="h-9 sm:h-10 px-2.5 sm:px-3.5 rounded-[12px] sm:rounded-[14px] border border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300 text-[11px] sm:text-[12px] font-bold cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <span className="hidden sm:inline">${logoutLoading ? (lang === "ar" ? "جاري الخروج..." : "Signing out...") : (lang === "ar" ? "تسجيل الخروج" : "Log Out")}</span>
+                  <span className="sm:hidden">${logoutLoading ? "..." : (lang === "ar" ? "خروج" : "Exit")}</span>
+                </button>
+              ` : null}
+
               <!-- Language Switcher Button (Globe Icon 🌐) -->
               <button
                 id="lang-toggle"
@@ -1785,6 +1842,28 @@
             </button>
           </div>
         </div>
+
+        <section aria-label=${lang === "ar" ? "تنزيل دليل الاستخدام" : "Download user guide"} className="mx-auto max-w-[1440px] px-3 sm:px-4 md:px-8 mt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-stone-200 dark:border-white/15 bg-white/90 dark:bg-stone-900/90 px-4 py-3 shadow-sm glass-panel">
+            <div>
+              <p className="text-sm font-bold">${lang === "ar" ? "دليل استخدام محيط المعرفة" : "Knowledge Ocean User Guide"}</p>
+              <p className="text-xs opacity-70 mt-1">${lang === "ar" ? "اختر لغة الدليل ونزّل نسخة PDF للقراءة دون اتصال." : "Choose a language and download the PDF for offline reading."}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="user-guide-language" className="text-xs font-bold">${lang === "ar" ? "لغة الدليل" : "Guide language"}</label>
+              <select id="user-guide-language" value=${guideLanguage} onChange=${(e) => {
+                setGuideLanguage(e.target.value);
+                try { localStorage.setItem("ko_guide_language", e.target.value); } catch (_) {}
+              }} className="h-10 rounded-[12px] border border-stone-300 dark:border-white/20 bg-white dark:bg-stone-950 px-3 text-sm text-stone-900 dark:text-white">
+                <option value="ar">العربية (RTL)</option>
+                <option value="en">English</option>
+              </select>
+              <a id="download-user-guide" href=${`/api/user-guide/${guideLanguage}`} download=${`KnowledgeOcean_User_Guide_${guideLanguage.toUpperCase()}.pdf`} className="inline-flex items-center h-10 rounded-[12px] bg-teal-700 hover:bg-teal-800 px-4 text-white text-xs font-bold transition">
+                ${lang === "ar" ? "تنزيل دليل الاستخدام (PDF)" : "Download User Guide (PDF)"}
+              </a>
+            </div>
+          </div>
+        </section>
 
         <!-- Alert Notification -->
         ${alertInfo.text ? html`
@@ -3038,7 +3117,7 @@
                       const isExpanded = !!expandedAbstracts[idx];
                       const isPreprint = !!paper.is_preprint;
                       const hasOA = !!(paper.is_oa || paper.oa_url || paper.pdf_url);
-                      const oaLink = paper.oa_url || paper.pdf_url || (paper.doi ? `https://doi.org/${paper.doi}` : null);
+                      const oaLink = paper.oa_url || paper.pdf_url || (paper.doi && paper.doi !== "N/A" ? `https://doi.org/${paper.doi}` : null);
                       const authorsStr = (paper.authors && paper.authors.length) ? paper.authors.join(", ") : "Unknown Authors";
 
                       return html`
@@ -3171,7 +3250,7 @@
                           <!-- Bottom Actions -->
                           <div className="pt-2 flex items-center justify-between flex-wrap gap-2 border-t border-stone-200/50 dark:border-white/5 text-[11px]">
                             <div className="flex items-center gap-3">
-                              ${paper.doi ? html`
+                              ${paper.doi && paper.doi !== "N/A" ? html`
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <a
                                     href=${`https://doi.org/${paper.doi}`}
@@ -3211,7 +3290,7 @@
                                 >
                                   <span>${t.directLinkDownload}</span>
                                 </a>
-                              ` : (paper.doi ? html`
+                              ` : (paper.doi && paper.doi !== "N/A" ? html`
                                 ${(() => {
                                   const acc = cardAccessMap[paper.doi];
                                   const isChecking = cardCheckingMap[paper.doi];
@@ -3257,10 +3336,10 @@
                                ` : null)}
 
                                <!-- Permanent Sci-Hub Button on Card -->
-                               ${(paper.doi || paper.title) ? (() => {
+                               ${((paper.doi && paper.doi !== "N/A" ? paper.doi : paper.title)) ? (() => {
                                  const acc = cardAccessMap[paper.doi];
                                  const shConfirmed = acc?.has_scihub && acc?.scihub_url;
-                                 const shUrl = acc?.scihub_url || `https://sci-hub.ren/${encodeURIComponent(paper.doi || paper.title)}`;
+                                 const shUrl = acc?.scihub_url || `https://sci-hub.ren/${encodeURIComponent((paper.doi && paper.doi !== "N/A" ? paper.doi : paper.title))}`;
                                  return html`
                                    <a
                                      href=${shUrl}
@@ -3283,7 +3362,7 @@
                               ${(() => {
                                 const acc = cardAccessMap[paper.doi];
                                 const rg = acc?.researchgate || {};
-                                const rgUrl = rg.download_url || rg.url || `https://www.researchgate.net/search/publication?q=${encodeURIComponent(paper.doi || paper.title)}`;
+                                const rgUrl = rg.download_url || rg.url || `https://www.researchgate.net/search/publication?q=${encodeURIComponent((paper.doi && paper.doi !== "N/A" ? paper.doi : paper.title))}`;
                                 const hasDl = rg.has_download;
                                 return html`
                                   <a
@@ -3446,7 +3525,7 @@
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold">
-                    ${lang === "ar" ? "🛡️ خصوصية مطلقة 100%" : "🛡️ 100% Zero Data Retention"}
+                    ${lang === "ar" ? "🛡️ خصوصية واحتفاظ مؤقت" : "🛡️ Privacy & Temporary Storage"}
                   </span>
                 </div>
               </div>
@@ -3455,12 +3534,12 @@
               <div className="rounded-[18px] border border-emerald-500/40 bg-emerald-500/10 dark:bg-emerald-950/30 p-4 sm:p-5 text-emerald-950 dark:text-emerald-200 shadow-sm">
                 <div className="flex items-center gap-2 font-black text-[13px] sm:text-[14px] text-emerald-800 dark:text-emerald-300 mb-2">
                   <span className="text-xl">🛡️</span>
-                  <span>${lang === "ar" ? "ضمان الخصوصية التامة: الموقع لا يحتفظ بأي معلومات للمستخدمين إطلاقاً" : "Zero Data Retention Guarantee: 100% User Privacy"}</span>
+                  <span>${lang === "ar" ? "بيانات البحث وحماية الحساب" : "Search Data & Account Protection"}</span>
                 </div>
                 <p className="text-[12px] sm:text-[13px] leading-relaxed opacity-95 text-stone-800 dark:text-stone-200">
                   ${lang === "ar"
-                    ? " المنصة لا تحتفظ ولا تسجل أي معلومات أو بيانات شخصية للمستخدمين نهائياً. لا يتم تخزين استعلاماتك البحثية، ولا سجلات هويتك، ولا عناوين الـ IP، ولا نتائج البحث في أي قواعد بيانات دائمة أو ملفات تعريفية. تتم معالجة كافة الاستعلامات وتوليد التقارير مؤقتاً في الذاكرة الحية (In-Memory) خلال جلستك النشطة فقط، وتُمسح الملفات المؤقتة تلقائياً."
-                    : " Knowledge Ocean does not log, track, or retain any personal user data, search queries, IP addresses, or retrieved results in any permanent database. All queries, indexing, and report generations execute strictly in volatile memory (In-Memory) during your active session and temporary files are automatically purged."
+                    ? " تُحفظ استعلامات البحث ونتائجه وبيانات المهام على الخادم لاسترجاع السجل. تُحذف ملفات التقارير تلقائياً بعد 48 ساعة، وتُستخدم بيانات الحصة وعناوين IP لحماية الخدمة وإدارة الاستخدام. مفتاح Elsevier الاختياري محفوظ في متصفحك ويُرسل عند البحث دون حفظه في سجلات المهام."
+                    : " Search queries, results, and task data are stored on the server for history. Report files are deleted automatically after 48 hours. Quota and IP data support usage limits and account protection. Your optional Elsevier key is saved in your browser and sent during searches without being stored in task records."
                   }
                 </p>
               </div>
@@ -3603,7 +3682,7 @@
               <p className="text-[13px] opacity-80 mt-2 leading-6">
                 ${isLocal
                   ? (lang === "ar" ? "تم استخراج الأبحاث بنجاح وحفظ الحزمة المضغوطة مباشرة على جهازك، ويمكنك تصفح الأبحاث المستخرجة مباشرة أدناه." : "Papers successfully extracted and package saved directly to your computer. You can explore extracted papers directly below.")
-                  : (lang === "ar" ? "تمت عملية المسح بنجاح وفهرسة وتجميع الأوراق في حزمة ZIP كاملة." : "Search, indexing, and packaging into full ZIP archive completed successfully.")}
+                  : (lang === "ar" ? "اكتمل البحث وتجهيز ملف النتائج للتنزيل." : "Search completed and your results file is ready to download.")}
               </p>
 
               <!-- Local Save Path Display in Modal -->
@@ -3730,7 +3809,7 @@
                 <!-- Links & DOIs in modal -->
                 <div className="pt-2 flex flex-wrap items-center justify-between gap-3 text-[12px]">
                   <div className="flex items-center gap-3">
-                    ${abstractModalPaper.doi ? html`
+                    ${abstractModalPaper.doi && abstractModalPaper.doi !== "N/A" ? html`
                       <a
                         href=${`https://doi.org/${abstractModalPaper.doi}`}
                         target="_blank"
@@ -4065,7 +4144,7 @@
 
               <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
                 <!-- Active Account Status (If already logged in) -->
-                ${password ? html`
+                ${password || quota.isVip || quota.isOther ? html`
                   <div className=${`p-4 rounded-[18px] border flex items-start gap-3.5 ${
                     quota.isVip
                       ? "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200"
@@ -4158,11 +4237,12 @@
 
                 <!-- Code Input Field -->
                 <div className="space-y-1.5 pt-1">
-                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-300">
+                  <label htmlFor="login-access-code" className="block text-xs font-bold text-stone-700 dark:text-stone-300">
                     ${lang === "ar" ? "أدخل رمز المرور أو مفتاح VIP:" : "Enter Access Code or VIP Key:"}
                   </label>
                   <div className="relative">
                     <input
+                      id="login-access-code"
                       type=${loginShowPassword ? "text" : "password"}
                       dir="ltr"
                       disabled=${isIpBanned || loginLoading}
@@ -4182,6 +4262,39 @@
                       ${loginShowPassword ? "🙈" : "👁️"}
                     </button>
                   </div>
+                </div>
+                <div className="space-y-2 border-t border-stone-200 dark:border-white/10 pt-4">
+                  <label htmlFor="elsevier-api-key" className="block text-xs font-bold text-stone-700 dark:text-stone-300">
+                    ${lang === "ar" ? "مفتاح Elsevier API الخاص بك (اختياري)" : "Your Elsevier API Key (optional)"}
+                  </label>
+                  <input
+                    id="elsevier-api-key"
+                    type="password"
+                    dir="ltr"
+                    autoComplete="off"
+                    spellCheck=${false}
+                    maxLength="256"
+                    value=${elsevierKeyInput}
+                    onInput=${(e) => { setElsevierKeyInput(e.target.value); setElsevierKeyMessage(""); }}
+                    placeholder="Elsevier / Scopus API key"
+                    className="w-full h-[46px] px-4 rounded-[14px] border border-stone-300 dark:border-white/20 bg-stone-50 dark:bg-black/40 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 text-stone-900 dark:text-white"
+                  />
+                  <p className="text-[11px] opacity-75 leading-relaxed">
+                    ${lang === "ar" ? "يُحفظ في هذا المتصفح ويُستخدم بدل مفتاح المنصة في بحث Scopus لحساب VIP. يُرسل عبر الخادم إلى Elsevier وقت البحث ولا يُحفظ في سجلات البحث. يمكنك حذفه من هنا." : "Saved in this browser and used instead of the platform key for VIP Scopus searches. Sent through the server to Elsevier during search, without saving it in search records. You can remove it here."}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" id="save-elsevier-key" onClick=${saveElsevierKey} className="px-3 py-2 rounded-[10px] bg-blue-600 text-white text-xs font-bold cursor-pointer">
+                      ${lang === "ar" ? "حفظ المفتاح في المتصفح" : "Save Key in Browser"}
+                    </button>
+                    <button type="button" id="clear-elsevier-key" onClick=${() => {
+                      try { localStorage.removeItem("ko_elsevier_api_key"); } catch (_) {}
+                      setElsevierApiKey(""); setElsevierKeyInput("");
+                      setElsevierKeyMessage(lang === "ar" ? "تم حذف المفتاح المحفوظ." : "Saved key removed.");
+                    }} className="px-3 py-2 rounded-[10px] border border-stone-300 dark:border-white/20 text-xs font-bold cursor-pointer">
+                      ${lang === "ar" ? "حذف المفتاح" : "Remove Key"}
+                    </button>
+                  </div>
+                  ${elsevierKeyMessage ? html`<p role="status" className="text-xs font-medium">${elsevierKeyMessage}</p>` : null}
                 </div>
               </div>
 

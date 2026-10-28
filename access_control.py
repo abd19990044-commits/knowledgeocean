@@ -58,10 +58,10 @@ def session_owner(request: Request) -> str | None:
     if len(raw) > 1024 or raw.count(".") != 1:
         return None
     payload, signature = raw.split(".", 1)
-    expected = _b64(hmac.new(_SECRET, payload.encode("ascii"), hashlib.sha256).digest())
-    if not hmac.compare_digest(signature, expected):
-        return None
     try:
+        expected = _b64(hmac.new(_SECRET, payload.encode("ascii"), hashlib.sha256).digest())
+        if not hmac.compare_digest(signature.encode("ascii"), expected.encode("ascii")):
+            return None
         decoded = json.loads(_decode(payload))
         if not isinstance(decoded, dict) or decoded.get("expires", 0) <= time.time():
             return None

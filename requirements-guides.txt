@@ -1,0 +1,3 @@
+# Only needed when rebuilding the committed public user-guide PDFs.
+reportlab==4.4.3
+pypdf==6.1.1

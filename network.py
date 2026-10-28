@@ -37,7 +37,9 @@ try:
         total=2,
         status_forcelist=[500, 502, 503, 504],
         backoff_factor=1.0,
-        respect_retry_after_header=True
+        # A provider may send Retry-After measured in hours. Circuit breakers
+        # handle cooldowns; urllib3 must never sleep for that unbounded value.
+        respect_retry_after_header=False
     )
     _adapter = HTTPAdapter(pool_connections=64, pool_maxsize=64, max_retries=retry_strategy)
     HTTP.mount("https://", _adapter)
@@ -112,20 +114,32 @@ CANCELLED_TASKS = set()
 TASKS = {}
 TASKS_LOCK = threading.RLock()
 
+
+def _task_stopped(task_id: Optional[str]) -> bool:
+    if not task_id:
+        return False
+    if task_id in CANCELLED_TASKS:
+        return True
+    with TASKS_LOCK:
+        task = TASKS.get(task_id, {})
+        deadline = task.get("_search_deadline")
+        return task.get("status") in ("completed", "error") or bool(deadline and time.monotonic() >= deadline)
+
 def safe_get(engine_name: str, url: str, task_id: Optional[str] = None, is_guest: bool = False, **kwargs) -> Optional[requests.Response]:
     """
     Executes a safe GET request respecting per-provider locks, delays,
     granular circuit breaker cooldowns (429, 401/403, 5xx, timeout), and instant task cancellations.
     """
-    if task_id and task_id in CANCELLED_TASKS:
+    circuit_key = kwargs.pop("circuit_key", engine_name)
+    if _task_stopped(task_id):
         return None
 
     # Check circuit breaker
-    if is_engine_in_cooldown(engine_name):
+    if is_engine_in_cooldown(circuit_key):
         return None
 
     while is_guest and not GUESTS_CAN_RUN.is_set():
-        if task_id and task_id in CANCELLED_TASKS:
+        if _task_stopped(task_id):
             return None
         if task_id:
             with TASKS_LOCK:
@@ -137,16 +151,18 @@ def safe_get(engine_name: str, url: str, task_id: Optional[str] = None, is_guest
                 if task_id in TASKS:
                     TASKS[task_id].update({"status": "processing", "message": "جاري استئناف البحث بعد انتهاء مستخدم الـ VIP..."})
 
-    if task_id and task_id in CANCELLED_TASKS:
+    if _task_stopped(task_id):
         return None
 
     lock = ENGINE_LOCKS.get(engine_name)
     delay = ENGINE_DELAYS.get(engine_name, 0.3)
 
     if lock:
-        lock.acquire()
+        while not lock.acquire(timeout=0.2):
+            if _task_stopped(task_id):
+                return None
     try:
-        if task_id and task_id in CANCELLED_TASKS:
+        if _task_stopped(task_id) or is_engine_in_cooldown(circuit_key):
             return None
         res = HTTP.get(url, **kwargs)
         if task_id and task_id in CANCELLED_TASKS:
@@ -156,17 +172,17 @@ def safe_get(engine_name: str, url: str, task_id: Optional[str] = None, is_guest
             cooldown = 60.0
             if retry_after and retry_after.isdigit():
                 cooldown = min(180.0, float(retry_after))
-            trip_engine_circuit(engine_name, cooldown_seconds=cooldown, reason="HTTP 429 Too Many Requests")
+            trip_engine_circuit(circuit_key, cooldown_seconds=cooldown, reason="HTTP 429 Too Many Requests")
         elif res.status_code in (401, 403):
-            trip_engine_circuit(engine_name, cooldown_seconds=300.0, reason=f"HTTP {res.status_code} Auth/Forbidden")
+            trip_engine_circuit(circuit_key, cooldown_seconds=300.0, reason=f"HTTP {res.status_code} Auth/Forbidden")
         elif res.status_code >= 500:
-            trip_engine_circuit(engine_name, cooldown_seconds=30.0, reason=f"HTTP {res.status_code} Server Error")
+            trip_engine_circuit(circuit_key, cooldown_seconds=30.0, reason=f"HTTP {res.status_code} Server Error")
 
         if lock and not (task_id and task_id in CANCELLED_TASKS):
             time.sleep(delay)
         return res
     except (requests.exceptions.Timeout, requests.exceptions.ConnectTimeout, requests.exceptions.ReadTimeout):
-        trip_engine_circuit(engine_name, cooldown_seconds=20.0, reason="Request Timeout")
+        trip_engine_circuit(circuit_key, cooldown_seconds=20.0, reason="Request Timeout")
         return None
     except requests.exceptions.RequestException as e:
         log.warning(f"Engine '{engine_name}' request failed: {e}")
