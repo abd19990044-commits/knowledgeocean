@@ -1,0 +1,51 @@
+name: Verify deployed Hugging Face Space
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy KnowledgeOcean to Hugging Face Space"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: HF_TOKEN
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install requests huggingface_hub==0.36.0
+      - name: Verify built app and endpoint response
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os,time,requests
+          from huggingface_hub import HfApi
+          repo='salam1234561/KnowledgeOcean'
+          api=HfApi(token=os.environ['HF_TOKEN'])
+          base='https://salam1234561-knowledgeocean.hf.space'
+          stage=''
+          for _ in range(24):
+              stage=api.get_space_runtime(repo_id=repo).stage
+              print('HF stage:',stage,flush=True)
+              if stage=='RUNNING':
+                  break
+              if stage in ('BUILD_ERROR','RUNTIME_ERROR','CONFIG_ERROR','NO_APP_FILE'):
+                  raise SystemExit('HF Space failed: '+stage)
+              time.sleep(10)
+          else:
+              raise SystemExit('HF Space did not reach RUNNING during smoke test')
+          health=requests.get(base+'/health',timeout=15)
+          print('GET /health:',health.status_code,health.text[:100])
+          health.raise_for_status()
+          assert health.text.strip()=='OK'
+          root=requests.get(base+'/',timeout=20)
+          print('GET /:',root.status_code,len(root.content))
+          root.raise_for_status()
+          assert 'Knowledge Ocean' in root.text
+          print('Smoke checks passed')
+          PY
