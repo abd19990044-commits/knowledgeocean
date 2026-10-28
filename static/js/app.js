@@ -698,7 +698,7 @@
     const fetchQuota = async (pwd) => {
       try {
         const p = pwd !== undefined ? pwd : password;
-        const res = await fetch(`/api/guest-quota?guest_token=${encodeURIComponent(getOrCreateGuestToken())}`, { cache: "no-store" });
+        const res = await fetch("/api/guest-quota", { cache: "no-store", headers: { "X-Guest-Token": getOrCreateGuestToken() } });
         if (res.ok) {
           const d = await res.json();
           if (d.banned) {
@@ -1290,7 +1290,7 @@
     const handleLoadSearch = async (item) => {
       try {
         showAlert(lang === "ar" ? `جاري استرجاع نتائج بحث: "${item.query || item.filename}"...` : `Loading results for: "${item.query || item.filename}"...`, "info", 2000);
-        const res = await fetch(`/api/history/load?filename=${encodeURIComponent(item.filename)}&user_hash=${encodeURIComponent(item.user_hash || "")}&guest_token=${encodeURIComponent(getOrCreateGuestToken())}`);
+        const res = await fetch(`/api/history/load?filename=${encodeURIComponent(item.filename)}`);
         if (!res.ok) {
           throw new Error(lang === "ar" ? "تعذر جلب تفاصيل البحث" : "Unable to fetch search details");
         }
