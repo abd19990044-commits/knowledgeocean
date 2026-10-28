@@ -95,7 +95,7 @@ logging.getLogger("requests").setLevel(logging.ERROR)
 RAW_PASSWORDS = os.environ.get("APP_PASSWORD", "").strip()
 if not RAW_PASSWORDS:
     APP_PASSWORDS = set()
-    log.warning("APP_PASSWORD not configured: VIP access and Scopus searches are disabled until a secret is set.")
+    log.warning("APP_PASSWORD not configured: VIP access is disabled; users can still supply personal Elsevier keys.")
 else:
     APP_PASSWORDS = {part.strip() for part in re.split(r"[,،;؛\r\n]+", RAW_PASSWORDS) if part.strip()}
 
@@ -1011,6 +1011,38 @@ def _cleanup_task_files(user_space, safe_query="", ts="", pdf_files=None, pdf_zi
 # ─────────────────────────────────────────────────────────────────────────
 # خط المعالجة وإدارة الطابور
 # ─────────────────────────────────────────────────────────────────────────
+class SearchBudget:
+    """Collection deadlines, excluding queueing and report generation."""
+    SECONDS_PER_PAPER = 10
+    COMPREHENSIVE_SECONDS = 3 * 60 * 60
+    IDLE_SECONDS = 5 * 60
+
+    def __init__(self, target_limit: int, comprehensive: bool = False, clock=None):
+        self.clock = clock or time.monotonic
+        self.started_at = self.clock()
+        self.total_seconds = self.COMPREHENSIVE_SECONDS if comprehensive else max(1, int(target_limit)) * self.SECONDS_PER_PAPER
+        self.total_deadline = self.started_at + self.total_seconds
+        self.last_match_at = self.started_at
+
+    @property
+    def deadline(self):
+        return min(self.total_deadline, self.last_match_at + self.IDLE_SECONDS)
+
+    def record_match(self):
+        self.last_match_at = self.clock()
+
+    def remaining(self):
+        return max(0.0, self.deadline - self.clock())
+
+    def stop_reason(self):
+        now = self.clock()
+        if now >= self.total_deadline:
+            return "time_budget"
+        if now >= self.last_match_at + self.IDLE_SECONDS:
+            return "no_new_matches"
+        return None
+
+
 def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=False, download_fulltext=False, guest_ip="", guest_fp="", is_other=False, guest_token="", search_scope="all", doc_type_filter="all", **kwargs):
     if query:
         query = normalize_boolean_query(query.strip())
@@ -1069,7 +1101,7 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
 
     try:
         with_abstracts = bool(include_abstracts or download_fulltext)
-        process_pipeline(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=with_abstracts, guest_ip=guest_ip, guest_fp=guest_fp, guest_token=guest_token, is_other=is_other, search_scope=search_scope, doc_type_filter=doc_type_filter, elsevier_api_key=kwargs.get("elsevier_api_key", ""))
+        process_pipeline(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=with_abstracts, guest_ip=guest_ip, guest_fp=guest_fp, guest_token=guest_token, is_other=is_other, search_scope=search_scope, doc_type_filter=doc_type_filter, elsevier_api_key=kwargs.get("elsevier_api_key", ""), comprehensive_search=kwargs.get("comprehensive_search", False))
     finally:
         if not is_guest:
             with PREMIUM_LOCK:
@@ -1087,7 +1119,7 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
 def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliation="", uh="default", task_id="", require_title=False, year_from=None, year_to=None, include_preprint=True, is_guest=False, include_abstracts=False, download_fulltext=False, guest_ip="", guest_fp="", is_other=False, search_scope="all", doc_type_filter="all", **kwargs):
     guest_token = kwargs.get("guest_token", "")
     # Request-scoped credentials stay in memory, never in task data or SQLite.
-    personal_elsevier_key = (kwargs.get("elsevier_api_key") or "").strip() if not is_guest else ""
+    personal_elsevier_key = (kwargs.get("elsevier_api_key") or "").strip()
     with_abstracts = bool(include_abstracts or download_fulltext or kwargs.get("with_abstracts", False))
     if query:
         query = normalize_boolean_query(query.strip())
@@ -1123,8 +1155,10 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
             active = [k for k in book_priority if k in FETCH_BATCH_MAP]
         elif db_source == 'all':
             fast_priority = ['verified_literature', 'pubmed', 'crossref', 'openalex', 'europepmc', 'doaj', 'semanticscholar', 'core', 'zenodo']
-            # The licensed Elsevier API is included in comprehensive searches only for VIP.
-            if not is_guest and (personal_elsevier_key or os.environ.get('ELSEVIER_API_KEY', '').strip() or ELSEVIER_API_KEY):
+            # Every tier may use its own key; only VIP may use the platform key.
+            if personal_elsevier_key:
+                fast_priority.insert(0, 'elsevier')
+            elif not is_guest and (os.environ.get('ELSEVIER_API_KEY', '').strip() or ELSEVIER_API_KEY):
                 fast_priority.append('elsevier')
             if search_scope != 'papers':
                 fast_priority.extend(['googlebooks', 'openlibrary'])
@@ -1137,7 +1171,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         if search_scope == 'papers':
             active = [k for k in active if k not in ('googlebooks', 'openlibrary')]
 
-        if is_guest and 'elsevier' in active:
+        if is_guest and not personal_elsevier_key and 'elsevier' in active:
             active.remove('elsevier')
         if not is_include_preprint and 'arxiv' in active:
             active.remove('arxiv')
@@ -1181,24 +1215,26 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                 return True
 
         round_no = 0
-        search_started = time.monotonic()
-        search_max_seconds = bounded_env_int("SEARCH_MAX_SECONDS", 90, 30, 150)
-        max_search_rounds = bounded_env_int("SEARCH_MAX_ROUNDS", 4, 2, 8)
-        _set_task(task_id, _search_deadline=search_started + search_max_seconds)
-        rounds_without_new_papers = 0
+        comprehensive_search = bool(kwargs.get("comprehensive_search", False) or unlimited)
+        budget = SearchBudget(target_limit, comprehensive=comprehensive_search and not is_exact_doi)
+        _set_task(task_id, _search_deadline=budget.deadline,
+                  search_budget_seconds=budget.total_seconds, search_idle_seconds=budget.IDLE_SECONDS)
+        finish_reason = "sources_exhausted"
         def provider_in_cooldown(name):
-            circuit = "elsevier:" + hashlib.sha256(personal_elsevier_key.encode()).hexdigest() if name == "elsevier" and personal_elsevier_key else name
-            return is_engine_in_cooldown(circuit)
+            # Scopus handles its own cooldown so it can explain entitlement and
+            # quota failures to the caller without retrying the upstream API.
+            return False if name == "elsevier" else is_engine_in_cooldown(name)
         with open(txt_path, "w", encoding="utf-8") as txt_file:
             txt_file.write(f"Knowledge Ocean Exploration Log\nTopic: {query}\nDate: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n" + "="*70 + "\n\n")
 
             while len(paper_index) < target_limit:
-                if round_no >= max_search_rounds or time.monotonic() - search_started >= search_max_seconds:
-                    log.warning("Search budget reached for task %s: %s rounds, %s papers", task_id, round_no, len(paper_index))
+                if budget.stop_reason():
+                    finish_reason = budget.stop_reason()
+                    log.info("Search %s stopped (%s) after %s rounds with %s papers", task_id, finish_reason, round_no, len(paper_index))
                     break
-                before_count = len(paper_index)
                 round_no += 1
                 if task_id in CANCELLED_TASKS:
+                    finish_reason = "cancelled"
                     log.info(f"Task {task_id} cancellation detected in loop. Stopping search with {len(paper_index)} papers.")
                     break
 
@@ -1209,8 +1245,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                     if not active_this_round:
                         break
 
-                remaining_seconds = search_max_seconds - (time.monotonic() - search_started)
+                remaining_seconds = budget.remaining()
                 if remaining_seconds <= 0:
+                    finish_reason = budget.stop_reason() or "time_budget"
                     break
                 executor = ThreadPoolExecutor(max_workers=min(6, len(active_this_round)))
                 futures = {
@@ -1222,7 +1259,10 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                 }
 
                 try:
-                    for fut in as_completed(futures, timeout=min(12 if target_limit <= 10 else 22, max(1, remaining_seconds))):
+                    for fut in as_completed(futures, timeout=min(12 if target_limit <= 10 else 22, max(0.001, remaining_seconds))):
+                        if budget.stop_reason():
+                            finish_reason = budget.stop_reason()
+                            break
                         if task_id in CANCELLED_TASKS:
                             log.info(f"Task {task_id} cancellation detected in futures. Breaking out.")
                             break
@@ -1231,9 +1271,14 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                             batch_papers = fut.result()
                             provider_diagnostics[eng_name] = {
                                 "returned": provider_diagnostics.get(eng_name, {}).get("returned", 0) + len(batch_papers or []),
-                                "status": "responded"
+                                "status": engine_states[eng_name].get("provider_status", "responded")
                             }
+                            if engine_states[eng_name].get("warning"):
+                                provider_diagnostics[eng_name]["warning"] = engine_states[eng_name]["warning"]
                             for p in batch_papers:
+                                if budget.stop_reason():
+                                    finish_reason = budget.stop_reason()
+                                    break
                                 if not isinstance(p, CanonicalPaper):
                                     continue
                                 if task_id in CANCELLED_TASKS:
@@ -1255,7 +1300,15 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                                     continue
 
                                 # P1.3 & P1.4: Add or merge into canonical index
+                                previous_count = len(paper_index)
                                 canonical = paper_index.add_or_merge(p)
+                                if len(paper_index) > previous_count:
+                                    budget.record_match()
+                                    # Refresh in-flight network waiters without
+                                    # writing SQLite once per accepted record.
+                                    with TASKS_LOCK:
+                                        if task_id in TASKS:
+                                            TASKS[task_id]["_search_deadline"] = budget.deadline
 
                                 txt_entry = f"[{len(paper_index)}] ({canonical.year}) {canonical.title}\n"
                                 txt_entry += f"    Authors: {format_authors(canonical.authors)}\n"
@@ -1289,28 +1342,28 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                     executor.shutdown(wait=False, cancel_futures=True)
 
                 if task_id in CANCELLED_TASKS:
+                    finish_reason = "cancelled"
                     log.info(f"Task {task_id} cancellation detected after batch. Exiting search loop with {len(paper_index)} papers.")
                     break
 
                 if len(paper_index) >= target_limit:
-                    break
-                if len(paper_index) <= before_count:
-                    rounds_without_new_papers += 1
-                else:
-                    rounds_without_new_papers = 0
-                if rounds_without_new_papers >= 2:
-                    log.warning("Stopping task %s: two search rounds without new papers", task_id)
+                    finish_reason = "target_reached"
                     break
 
                 pct = min(75, 15 + int((len(paper_index) / target_limit) * 60)) if not unlimited else min(75, 15 + round_no * 10)
-                _set_task(task_id, progress=pct, message=f"تم جمع وتدقيق {len(paper_index)} من أصل {target_limit} بحث...")
+                goal = "" if unlimited else f" من أصل {target_limit}"
+                _set_task(task_id, progress=pct, message=f"تم جمع وتدقيق {len(paper_index)}{goal} بحث...", _search_deadline=budget.deadline)
 
+        provider_warnings = [info["warning"] for info in provider_diagnostics.values() if info.get("warning")]
+        _set_task(task_id, provider_diagnostics=provider_diagnostics, provider_warnings=provider_warnings, finish_reason=finish_reason)
         all_canonical = paper_index.get_all()
         if not all_canonical:
             if task_id in CANCELLED_TASKS:
                 raise ValueError("تم إيقاف البحث بناءً على طلبك (لم يتم العثور على أبحاث بعد).")
             detail = ", ".join(f"{name}: {info.get('status', 'unknown')} ({info.get('returned', 0)})" for name, info in sorted(provider_diagnostics.items()))
             log.warning("Task %s returned no qualifying papers. Providers: %s", task_id, detail or "no providers returned")
+            if db_source == "elsevier" and provider_warnings:
+                raise ValueError(provider_warnings[0])
             raise ValueError("لم يتم استرجاع أوراق علمية مطابقة. قد تكون قواعد البيانات غير متاحة أو شروط البحث شديدة التقييد. راجع سجلات المزودين. / No matching papers retrieved; provider errors or restrictive filters may be responsible.")
 
         # Ensure exact DOI result has enriched authors, real year, and substantive title
@@ -1732,7 +1785,7 @@ async def api_guest_quota(request: Request, response: Response, password: str = 
 @app.post("/api/login")
 async def api_login(request: Request):
     """
-    تسجيل الدخول بالرمز الثانوي أو رمز VIP مع حظر IP لمدة 24 ساعة بعد 5 محاولات خاطئة متتالية.
+    تسجيل الدخول برمز الوصول أو رمز VIP مع حظر IP لمدة 24 ساعة بعد 5 محاولات خاطئة متتالية.
     """
     require_same_origin(request)
     ip, _ = get_fingerprint(request)
@@ -1791,7 +1844,7 @@ async def api_login(request: Request):
             "is_vip": False,
             "is_other": True,
             "quota": SECONDARY_SEARCH_QUOTA,
-            "message": f"تم تفعيل الرمز الثانوي بنجاح! حصة يومية متجددة سعتها {SECONDARY_SEARCH_QUOTA} بحثاً (تتجدد 12:00 ص بتوقيت بغداد)."
+            "message": f"تم تفعيل رمز الوصول بنجاح! حصة يومية متجددة سعتها {SECONDARY_SEARCH_QUOTA} بحثاً (تتجدد 12:00 ص بتوقيت بغداد)."
         })
         issue_session(response, user_hash_for(password), secure=request.url.scheme == "https")
         return response
@@ -1859,7 +1912,7 @@ async def download_user_guide(language: str):
         raise HTTPException(503, "User guide temporarily unavailable")
     return FileResponse(path, media_type="application/pdf", filename=filename, headers={
         "Content-Language": language,
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "no-cache, must-revalidate",
         "X-Content-Type-Options": "nosniff",
     })
 
@@ -1918,6 +1971,7 @@ async def start_search(
         return JSONResponse(status_code=400, content={"error": "في وضع الباحث، اكتب الاسم بالأحرف الإنجليزية فقط."})
     if is_doi_query(query):
         limit = 1
+    comprehensive_search = limit >= 999999
     with_abstracts = bool(include_abstracts or download_fulltext)
     ip, browser_fp = get_fingerprint(request)
     is_banned, ban_remaining = db_check_ip_ban(ip)
@@ -1967,8 +2021,8 @@ async def start_search(
     is_guest = not is_vip
 
     # Validate licensed-provider access before charging any guest quota.
-    if db_source == "elsevier" and not is_vip:
-        return JSONResponse(status_code=403, content={"error": "قاعدة بيانات Scopus (Elsevier) تتطلب مفتاح الوصول (VIP)."})
+    if db_source == "elsevier" and not (is_vip or elsevier_api_key):
+        return JSONResponse(status_code=403, content={"error": "أضف مفتاح Elsevier الشخصي من نافذة الدخول لاستخدام Scopus. / Add your personal Elsevier API key in Sign In to use Scopus."})
 
     if is_vip or is_other:
         prospective_owner = user_hash_for(clean_pwd) if clean_pwd else owner_session
@@ -2073,7 +2127,8 @@ async def start_search(
         "guest_token": clean_guest_token if is_guest else "",
         "search_scope": search_scope,
         "doc_type_filter": doc_type_filter,
-        "elsevier_api_key": elsevier_api_key if is_vip else ""
+        "elsevier_api_key": elsevier_api_key,
+        "comprehensive_search": comprehensive_search
     }, daemon=True).start()
     return response
 

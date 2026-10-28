@@ -119,7 +119,7 @@ def calculate_accurate_title_similarity(target_title: str, candidate_title: str)
         boosted = max(base_sim, 0.93 - (extra_words * 0.03))
         base_sim = max(base_sim, boosted)
     else:
-        # Crucial penalty: if target has content words missing in candidate (e.g. user typed Naproxen, but paper is about Azelnidipine)
+        # Crucial penalty: if target has content words missing in candidate (e.g. a query names one entity, but the candidate concerns another)
         if missing_cw:
             penalty = len(missing_cw) * 0.18
             base_sim = max(0.0, base_sim - penalty)

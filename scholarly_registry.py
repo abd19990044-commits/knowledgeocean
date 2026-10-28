@@ -16,25 +16,7 @@ from identifiers import normalize_doi
 log = logging.getLogger("AcademicAPI")
 
 # Core built-in registry of verified academic papers
-DEFAULT_VERIFIED_PAPERS: List[Dict[str, Any]] = [
-    {
-        "title": "RP-HPLC method for determination of naproxen in pharmaceutical dosage form",
-        "authors": ["Boyka Tsvetkova", "Lily Peikova"],
-        "journal": "Pharmacia",
-        "year": "2015",
-        "volume": "62",
-        "issue": "3",
-        "pages": "15-19",
-        "publisher": "Bulgarian Scientific Pharmaceutical Society (BSPHS)",
-        "doi": None,
-        "url": "https://www.researchgate.net/publication/282247012_RP-HPLC_method_for_determination_of_naproxen_in_pharmaceutical_dosage_form",
-        "doi_url": "https://www.researchgate.net/publication/282247012_RP-HPLC_method_for_determination_of_naproxen_in_pharmaceutical_dosage_form",
-        "oa_url": "https://www.researchgate.net/publication/282247012_RP-HPLC_method_for_determination_of_naproxen_in_pharmaceutical_dosage_form",
-        "abstract": "A simple, rapid, accurate and precise reversed-phase high-performance liquid chromatography (RP-HPLC) method was developed and validated for the determination of Naproxen in tablet dosage forms. Chromatographic separation was achieved on a C18 column using a mobile phase of acetonitrile, 0.5 M potassium dihydrogen phosphate buffer (pH 2.5) and tetrahydrofuran (45:53:2 v/v/v) with UV detection at 254 nm.",
-        "is_preprint": False,
-        "source": "ResearchGate"
-    }
-]
+DEFAULT_VERIFIED_PAPERS: List[Dict[str, Any]] = []
 
 def load_verified_registry() -> List[Dict[str, Any]]:
     """Loads verified papers including any custom additions from verified_papers.json."""

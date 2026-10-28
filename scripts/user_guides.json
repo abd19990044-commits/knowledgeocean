@@ -1,0 +1,372 @@
+{
+  "ar": [
+    [
+      "التعريف بالمنصة",
+      "دليل استخدام محيط المعرفة",
+      "إرشادات منهجية للاسترجاع الأكاديمي وتنظيم البيانات الببليوغرافية.",
+      [
+        [
+          "نطاق الخدمة",
+          "توفّر المنصة واجهة موحّدة للبحث في مصادر علمية متعددة، ومراجعة البيانات الببليوغرافية، ومطابقة معرّفات DOI، وإعداد تقارير قابلة للتنزيل. وتُفسَّر النتائج في ضوء تغطية المصادر وحداثة بياناتها وصلاحيات الوصول إليها."
+        ],
+        [
+          "إجراء البحث الأولي",
+          "يُحدَّد موضوع البحث بمصطلحات واضحة، ثم تُختار الفترة الزمنية والمصادر ونوع الوثيقة. ويُستحسن البدء بعدد محدود من السجلات لتقييم صلتها بالسؤال البحثي قبل توسيع نطاق الاسترجاع."
+        ],
+        [
+          "أمثلة من تخصصات متعددة",
+          "تشمل الاستعلامات المناسبة الذكاء الاصطناعي في الرعاية الصحية، والتنوع الحيوي وتغير المناخ، وتخزين الطاقة، والتعلّم الرقمي، والتضخم والنمو الاقتصادي، والتراث الثقافي والأرشفة الرقمية."
+        ],
+        [
+          "إدارة الرصيد",
+          "تُحتسب وحدة لكل سجل مطلوب، أو وحدتان عند طلب الملخصات. للضيف 50 وحدة يومية، ولصاحب رمز الوصول 250 وحدة يومية. وتُعتمد الحصة المبينة في رأس الصفحة، مع تجدد الرصيد عند منتصف الليل بتوقيت بغداد."
+        ],
+        [
+          "تنظيم الدليل",
+          "تعرض الصفحات التالية بناء الاستعلامات، وإدارة الوصول والمفتاح الشخصي، وفحص النتائج والتقارير، ومطابقة المعرّفات وتوثيق المراجع، ثم السجل والخصوصية والمعالجة الإجرائية للمشكلات."
+        ]
+      ]
+    ],
+    [
+      "استراتيجية الاسترجاع",
+      "صياغة الاستعلام وضبط نطاقه",
+      "تُبنى استراتيجية البحث على السؤال البحثي، لا على وفرة النتائج وحدها.",
+      [
+        [
+          "أنماط البحث",
+          "يُستخدم نمط الكلمات المفتاحية للموضوعات والمفاهيم، ونمط المؤلف للأسماء بالأحرف اللاتينية، ونمط العبارة التامة للصياغات المحددة. ويُخصَّص مركز المعرّفات لاستعلام DOI المباشر أو مطابقة عنوان الدراسة."
+        ],
+        [
+          "العلاقات المنطقية",
+          "يربط AND بين المفاهيم، ويجمع OR المرادفات والبدائل، ويستبعد NOT مصطلحات محددة. وتُنظّم الأقواس العلاقات بين المجموعات، وتحفظ علامات الاقتباس تسلسل الكلمات داخل العبارة."
+        ],
+        [
+          "مثال في العلوم البيئية",
+          "\"climate change\" AND (biodiversity OR ecosystems)",
+          "code"
+        ],
+        [
+          "التنويع التخصصي",
+          "في التربية يمكن البحث عن التعلّم الرقمي ومشاركة الطلبة؛ وفي الاقتصاد عن التضخم والنمو؛ وفي الهندسة عن الطاقة المتجددة والتخزين؛ وفي الإنسانيات عن التراث الثقافي والأرشيفات الرقمية."
+        ],
+        [
+          "المرشحات",
+          "تُضبط السنوات من الأقدم إلى الأحدث، ويُختار نطاق الأبحاث أو الكتب أو كليهما. وتتيح تصفية نوع الوثيقة تمييز المراجعات والتحليلات التجميعية والأبحاث الأصلية والمؤتمرات. ويُفعَّل إدراج المسودات بحسب متطلبات الدراسة."
+        ],
+        [
+          "حدود الاسترجاع الزمنية",
+          "تبلغ مهلة جمع النتائج 10 ثوانٍ لكل سجل مطلوب ضمن الحصة المتاحة، وبحد أقصى 3 ساعات لخيار «كل ما هو موجود». ويتوقف الجمع عند مرور 5 دقائق دون سجل مطابق جديد غير مكرر، أو اكتمال العدد، أو نفاد المصادر؛ ويُطبَّق الحد الأسبق. لا تشمل هذه المهلة انتظار الدور أو إعداد التقرير، وقد يكون العدد المسترجع أقل من المطلوب."
+        ]
+      ]
+    ],
+    [
+      "الوصول إلى المصادر",
+      "إدارة الوصول ومفتاح Elsevier",
+      "تُميَّز صلاحية المنصة عن صلاحية مصدر البيانات الخارجي.",
+      [
+        [
+          "رمز الوصول",
+          "تتيح نافذة تسجيل الدخول تفعيل رمز الوصول وإدارة الجلسة. وتُعرض الحصة المتاحة أعلى الصفحة. ويُنهي زر تسجيل الخروج الجلسة ويعيد الواجهة إلى وضع الضيف، بينما يظل حذف مفتاح Elsevier إجراءً مستقلاً."
+        ],
+        [
+          "المفتاح الشخصي",
+          "يتاح استخدام مفتاح Elsevier الشخصي للضيف ولصاحب رمز الوصول وللمستخدم المسجل. يُدخل المفتاح في الحقل الاختياري داخل نافذة الدخول، ثم يُحفظ بزر الحفظ في المتصفح. ولا يُشترط تسجيل الدخول لحفظه أو استخدامه."
+        ],
+        [
+          "توظيف المفتاح في البحث",
+          "يُرسل المفتاح الشخصي مع طلب البحث إلى Scopus، ويُدرج المصدر في البحث الشامل عند توفره. وتظل حصة المنصة وفئة المستخدم كما هما؛ فمفتاح المصدر لا يغيّر فئة الوصول أو الرصيد اليومي."
+        ],
+        [
+          "مراعاة الحساب المجاني",
+          "تُستخدم واجهة STANDARD للبيانات الأساسية، وبحد أقصى 25 سجلاً لكل طلب. وتُفصل طلبات Scopus بفاصل محافظ، ولا تُجرى محاولات إعادة خفية أو طلبات لخدمات مدفوعة أو ملخصات تتطلب اشتراكاً."
+        ],
+        [
+          "الحصة والصلاحيات",
+          "تُقرأ حدود المفتاح من استجابة Elsevier، وتتوقف الطلبات عند نفاد الحصة إلى موعد تجددها. كما يُبيَّن رفض الصلاحية أو تجاوز معدل الطلبات. وتختلف البيانات المتاحة بحسب تفعيل المفتاح والترخيص؛ ولا يضمن الحساب المجاني وصولاً كاملاً."
+        ],
+        [
+          "الحفظ والحماية",
+          "يبقى المفتاح في المتصفح المستخدم، ولا يُحفظ في سجلات المهام أو التقارير. يُنقل عبر الاتصال المشفر إلى الخادم لتنفيذ الطلب لدى Elsevier. ويُزال بزر حذف المفتاح، ولا يؤدي تسجيل الخروج وحده إلى مسحه."
+        ]
+      ]
+    ],
+    [
+      "تحليل المخرجات",
+      "مراجعة النتائج وإعداد التقارير",
+      "تُعدّ البيانات المسترجعة مدخلات للمراجعة النقدية والتحقق الببليوغرافي.",
+      [
+        [
+          "حالة المهمة",
+          "توضح مؤشرات التقدم مراحل الاسترجاع والتدقيق وإعداد التقرير. وقد تنتهي المهمة بعدد أقل من المطلوب. ويسمح إيقاف البحث بإعداد ما جُمع من سجلات؛ أما الإيقاف قبل استرجاع أي سجل فلا ينتج تقريراً."
+        ],
+        [
+          "فحص البيانات",
+          "تُراجع العناوين والمؤلفون والسنوات والدوريات والمصادر. ويتيح مستكشف النتائج تصفية الوثائق والبحث داخل القائمة بالعنوان أو المؤلف أو اسم الدورية، بما يدعم تحديد الدراسات ذات الصلة."
+        ],
+        [
+          "حدود التصنيف الآلي",
+          "تُستمد التصنيفات من بيانات المصادر؛ وغياب وسم المسودة لا يُعدّ إثباتاً للتحكيم. كذلك لا يعني وسم الوصول الحر وجود ملف PDF مباشر. ويُرجع إلى صفحة الناشر لتوثيق نوع المنشور وحالة الوصول."
+        ],
+        [
+          "الملخصات والنصوص الكاملة",
+          "يتضمن خيار الملخصات ما تتيحه المصادر ضمن صلاحياتها. وقد لا يعيد Scopus في العرض الأساسي ملخصاً. ولا تمثّل تقارير المنصة نسخاً من مقالات الناشر الكاملة، ولا تمنح حق الوصول إلى محتوى مقيد."
+        ],
+        [
+          "التنزيل والتصدير",
+          "يظهر زر التنزيل عند اكتمال المهمة. وقد يكون الناتج تقرير PDF أو حزمة ZIP تتضمن التقارير وملفات التوثيق، بحسب فئة الوصول. وتُفتح الملفات للتحقق من سلامتها واكتمال بياناتها قبل اعتمادها."
+        ],
+        [
+          "تسوية الرصيد",
+          "تُرفض الطلبات غير الصالحة قبل خصم الرصيد. ويُعاد الرصيد غير المستخدم عند نقص النتائج، كما يُرد الرصيد المحجوز عند فشل التصدير. واستئناف مهمة نشطة لا ينشئ طلباً مكرراً للمستخدم نفسه."
+        ]
+      ]
+    ],
+    [
+      "التوثيق الببليوغرافي",
+      "مطابقة المعرّفات وإدارة المراجع",
+      "تُعتمد المطابقة الببليوغرافية المتكاملة عند توثيق الهوية العلمية للمنشور.",
+      [
+        [
+          "استعلام المعرّف المباشر",
+          "يُدخل DOI أو رابطه الكامل في مركز المعرّفات. ثم تُراجع بيانات الدراسة والدورية والمؤلفين والسنة والروابط المرجعية. وقد تظل بعض الحقول غير متاحة في بيانات المصدر الأصلي."
+        ],
+        [
+          "مطابقة العنوان",
+          "يُستخدم العنوان الكامل قدر الإمكان، وتُقارن النتائج بالمؤلفين والسنة واسم الدورية. نسبة التشابه قرينة مساعدة وليست إثباتاً مستقلاً للمطابقة؛ فقد تشير العناوين المتقاربة إلى دراسات مختلفة أو إصدارات متعددة."
+        ],
+        [
+          "أمثلة للبحث بالعنوان",
+          "يمكن اختيار عنوان دراسة في التعلّم الرقمي، أو التنوع الحيوي، أو التحول الاقتصادي، أو الأرشفة الثقافية. وتُستبعد من نص الاستعلام الإضافات غير الأصلية مثل اسم الملف أو وصف صيغة التنزيل."
+        ],
+        [
+          "صيغ الاستشهاد",
+          "تتيح البطاقات نسخ الاستشهاد بصيغة APA أو بيانات BibTeX عند توفرها. وتُراجع الأسماء والعنوان والسنة والمجلد والعدد والصفحات والمعرّف قبل إدراج المرجع في بحث علمي أو رسالة جامعية."
+        ],
+        [
+          "الحقول الناقصة",
+          "يُرجع إلى سجل الناشر أو المستودع للتحقق من المؤلف أو السنة أو المعرّف المفقود. ولا تُستكمل البيانات بالتخمين. كما يُميَّز بين صفحة عرض السجل والنسخة الكاملة من المنشور."
+        ],
+        [
+          "مسار توثيق مقترح",
+          "يُصاغ السؤال البحثي، وتُنفّذ استراتيجية الاسترجاع، وتُراجع الملاءمة والهوية الببليوغرافية، ثم تُصدَّر المراجع. ويُحتفظ محلياً بنسخة من التقارير والمراجع التي خضعت للمراجعة."
+        ]
+      ]
+    ],
+    [
+      "الاستمرارية والخصوصية",
+      "السجل وضبط الاستخدام ومعالجة التعثر",
+      "يُوصى بالاحتفاظ بنسخ محلية من المخرجات اللازمة للعمل البحثي.",
+      [
+        [
+          "استرجاع الأعمال السابقة",
+          "تُحدَّث قائمة السجل لعرض الحزم، ثم تُفتح النتائج أو تُنزّل التقارير. وترتبط صلاحية الوصول بجلسة المتصفح. وتُحذف ملفات التقارير تلقائياً بعد 48 ساعة؛ ولذلك ينبغي تنزيل الملفات المهمة في وقت مناسب."
+        ],
+        [
+          "بيانات الخدمة",
+          "تُحفظ استعلامات البحث والنتائج وبيانات المهام على الخادم لتوفير السجل. وتُستخدم بيانات الرصيد وعناوين IP لإدارة الحصص وحماية الدخول. ولا يقتضي حذف ملفات التقارير حذف جميع سجلات قاعدة البيانات في التوقيت نفسه."
+        ],
+        [
+          "ضعف الاسترجاع أو بطء التنفيذ",
+          "تُراجع المصطلحات والمرادفات وشروط الاستبعاد والفترة الزمنية. ويمكن تخفيف مرشح العنوان أو اختيار مصدر آخر. وعند تعثر مصدر واحد قد تستمر بقية المصادر مع إظهار تنبيه يوضح السبب."
+        ],
+        [
+          "قيود Scopus",
+          "عند رفض الصلاحية يُتحقق من تفعيل Scopus للمفتاح. وعند نفاد الحصة يُنتظر موعد تجددها الذي يحدده المزود. ولا تُستخدم مفاتيح بديلة تلقائياً لتجاوز القيود المفروضة على المفتاح الشخصي."
+        ],
+        [
+          "استمرارية المفتاح",
+          "يتطلب الحفظ استخدام المتصفح نفسه والسماح بتخزين بيانات الموقع. وقد يزيل التصفح الخاص أو مسح بيانات الموقع المفتاح المحفوظ. ويُستخدم زر الحذف عند عدم الرغبة في بقائه، ولا سيما على الأجهزة المشتركة."
+        ],
+        [
+          "إنهاء الجلسة",
+          "تُنزّل التقارير المطلوبة وتُراجع بيانات الاستشهادات، ثم يُستخدم زر تسجيل الخروج أعلى الموقع لإنهاء الجلسة. تتبع لغة الدليل لغة الواجهة افتراضياً عند فتح الصفحة أو تبديل لغتها، مع إتاحة اختيار العربية أو الإنكليزية يدوياً."
+        ]
+      ]
+    ]
+  ],
+  "en": [
+    [
+      "PLATFORM OVERVIEW",
+      "Knowledge Ocean User Guide",
+      "Methodological guidance for scholarly retrieval and bibliographic documentation.",
+      [
+        [
+          "Scope of the service",
+          "The platform provides a unified interface for searching scholarly sources, examining bibliographic metadata, matching DOI identifiers, and preparing downloadable reports. Results should be interpreted in relation to source coverage, metadata quality, and access entitlements."
+        ],
+        [
+          "Initial search procedure",
+          "Define the research topic using specific concepts, then select publication years, sources, and document types. A small initial result set supports assessment of relevance before the retrieval scope is expanded."
+        ],
+        [
+          "Examples across disciplines",
+          "Suitable topics include artificial intelligence in healthcare, climate change and biodiversity, energy storage, digital learning, inflation and economic growth, and cultural heritage with digital archives."
+        ],
+        [
+          "Platform credits",
+          "Each requested record reserves one credit, or two when abstracts are requested. Guests receive 50 daily credits, while Access Code holders receive 250. The current allowance is displayed in the page header and renews at midnight in Baghdad."
+        ],
+        [
+          "Structure of this guide",
+          "The following sections address query construction, access and personal keys, result assessment and reports, identifier matching and references, and finally history, privacy, and procedural troubleshooting."
+        ]
+      ]
+    ],
+    [
+      "RETRIEVAL STRATEGY",
+      "Constructing and refining a query",
+      "A retrieval strategy should be guided by the research question rather than result volume alone.",
+      [
+        [
+          "Search modes",
+          "Keyword mode supports topics and concepts; author mode accepts names in Latin characters; exact-phrase mode targets a specified wording. The identifier hub supports direct DOI resolution and title-to-DOI matching."
+        ],
+        [
+          "Boolean relationships",
+          "AND combines concepts, OR includes synonyms or alternatives, and NOT excludes specified terms. Parentheses define groups, while quotation marks preserve the sequence of words in a phrase."
+        ],
+        [
+          "Environmental-science example",
+          "\"climate change\" AND (biodiversity OR ecosystems)",
+          "code"
+        ],
+        [
+          "Disciplinary variation",
+          "Education queries may combine digital learning with student engagement; economics queries may examine inflation and growth; engineering queries may address renewable energy and storage; humanities queries may connect heritage with digital archives."
+        ],
+        [
+          "Filters and scope",
+          "Enter publication years in chronological order and select papers, books, or both. Document-type filters distinguish reviews, meta-analyses, original research, and conference papers. Include preprints when appropriate to the study design."
+        ],
+        [
+          "Retrieval time limits",
+          "Collection allows 10 seconds per requested record within the available quota, or at most 3 hours for all available results. It stops after 5 minutes without a new, unique matching record, when the requested count is met, or when sources are exhausted; the earliest limit applies. Queueing and report generation are additional. Retrieval may yield fewer records than requested."
+        ]
+      ]
+    ],
+    [
+      "SOURCE ACCESS",
+      "Access management and Elsevier keys",
+      "Platform access and external-source entitlements are distinct.",
+      [
+        [
+          "Access Code",
+          "The sign-in dialog activates an Access Code and manages the browser session. The available allowance appears in the page header. Log Out ends the session and returns the interface to guest mode; removing an Elsevier key is a separate action."
+        ],
+        [
+          "Personal API key",
+          "Guests, Access Code holders, and signed-in users may use a personal Elsevier key. Enter it in the optional field within Sign In and select Save Key in Browser. Signing in is not required to save or use the key."
+        ],
+        [
+          "Use in retrieval",
+          "The personal key accompanies Scopus search requests and enables inclusion of Scopus in comprehensive searches. Platform credits and account classification remain unchanged; an external-source key does not alter the platform allowance."
+        ],
+        [
+          "Conservative requests for free accounts",
+          "Requests use basic STANDARD metadata and no more than 25 records per call. Scopus calls are conservatively spaced. Hidden transport retries, paid services, and subscription-only abstract requests are not performed."
+        ],
+        [
+          "Quota and entitlements",
+          "Allowance information is read from Elsevier responses. Requests stop when quota is exhausted until its reset time. Access denials and rate limits are reported explicitly. Data availability depends on key activation and licensing; a free account does not guarantee unrestricted access."
+        ],
+        [
+          "Storage and protection",
+          "The key remains in the current browser and is not stored in task records or reports. It is transmitted over HTTPS to the server for the Elsevier request. Remove Key deletes the saved value; signing out alone does not remove it."
+        ]
+      ]
+    ],
+    [
+      "ASSESSMENT OF OUTPUTS",
+      "Reviewing records and reports",
+      "Retrieved metadata should undergo critical and bibliographic assessment before reuse.",
+      [
+        [
+          "Task status",
+          "Progress indicators distinguish retrieval, record assessment, and report preparation. A task may finish below its requested count. Stopping may preserve collected records, whereas stopping before any retrieval produces no report."
+        ],
+        [
+          "Metadata inspection",
+          "Review titles, authors, years, journals, and source attribution. The results explorer supports document filtering and searching within the current list by title, author, or journal."
+        ],
+        [
+          "Limits of automated classification",
+          "Classifications derive from provider metadata. Absence of a preprint label does not establish peer review, and an open-access label does not guarantee a direct PDF. The publisher record should substantiate publication type and access status."
+        ],
+        [
+          "Abstracts and full text",
+          "Abstract mode includes material supplied under source entitlements. Scopus basic metadata may not include an abstract. Platform reports are not copies of publisher articles and do not grant access to restricted full text."
+        ],
+        [
+          "Downloads and exports",
+          "A download control appears after completion. Depending on access classification, output may be a PDF report or a ZIP containing reports and reference exports. Files should be opened and examined for completeness before use."
+        ],
+        [
+          "Credit reconciliation",
+          "Invalid requests are rejected before charging credits. Unused credits are returned when fewer eligible records are retrieved, and a failed export refunds its reservation. Resuming an active task does not create a duplicate search for the same user."
+        ]
+      ]
+    ],
+    [
+      "BIBLIOGRAPHIC DOCUMENTATION",
+      "Identifier matching and references",
+      "Document identity should be established through complete bibliographic comparison.",
+      [
+        [
+          "Direct identifier resolution",
+          "Enter a DOI or its full link in the identifier hub. Review the returned study, journal, authors, year, and reference links. Some fields may remain absent from the source metadata."
+        ],
+        [
+          "Title matching",
+          "Use the full title where possible and compare candidate records against authors, year, and journal. Similarity is supporting evidence rather than definitive identification; comparable titles may refer to different studies or versions."
+        ],
+        [
+          "Examples of title-based searches",
+          "Titles may concern digital learning, biodiversity, economic transformation, or cultural archiving. Remove additions that are not part of the original title, including filenames and download-format descriptions."
+        ],
+        [
+          "Citation formats",
+          "Result cards support APA citation copying or BibTeX data when available. Verify names, title, year, volume, issue, pages, and identifier before inclusion in a scholarly article or thesis."
+        ],
+        [
+          "Incomplete fields",
+          "Consult the publisher or repository record for missing authors, dates, or identifiers. Missing information should not be supplied by conjecture. Distinguish a metadata landing page from a full-text document."
+        ],
+        [
+          "Suggested documentation sequence",
+          "Formulate the research question, execute and refine the retrieval strategy, assess relevance and bibliographic identity, and then export references. Maintain local copies of reports and references that have been reviewed."
+        ]
+      ]
+    ],
+    [
+      "CONTINUITY AND PRIVACY",
+      "History, responsible use, and troubleshooting",
+      "Local copies should be retained for outputs required in subsequent research.",
+      [
+        [
+          "Retrieving previous work",
+          "Refresh history to display packages, then reopen results or download reports. Access depends on the browser session. Report files are deleted automatically after 48 hours, so important outputs should be downloaded promptly."
+        ],
+        [
+          "Service data",
+          "Queries, results, and task metadata are stored on the server to support history. Credit and IP data support usage limits and sign-in protection. Deleting report files does not necessarily remove all database records at the same time."
+        ],
+        [
+          "Sparse results or slow execution",
+          "Reconsider terminology, synonyms, exclusions, and publication years. Relax strict title filtering or select another source where appropriate. Other providers may continue when one source fails, accompanied by an explanatory notice."
+        ],
+        [
+          "Scopus restrictions",
+          "For an access denial, verify that Scopus access is enabled for the key. When quota is exhausted, wait for the provider's reported reset time. Alternative credentials are not substituted automatically to evade personal-key restrictions."
+        ],
+        [
+          "Persistence of the key",
+          "Persistence requires the same browser and permission to store site data. Private browsing or clearing site data may remove a saved key. Use Remove Key when retention is no longer desired, particularly on shared devices."
+        ],
+        [
+          "Ending a session",
+          "Download required reports and verify citations, then use Log Out in the page header to end the session. The handbook defaults to the interface language when the page opens or its language changes; Arabic or English may also be selected manually."
+        ]
+      ]
+    ]
+  ]
+}

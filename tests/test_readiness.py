@@ -76,15 +76,37 @@ class RequestSafetyTests(unittest.TestCase):
         self.assertNotIn(PERSONAL_KEY, json.dumps(database.db_get_task(task_id)))
         self.assertEqual(os.environ["ELSEVIER_API_KEY"], "SERVER_KEY")
 
-    def test_guest_key_does_not_grant_scopus_access(self):
+    def test_guest_key_allows_scopus_without_tier_upgrade(self):
         r = self.client.post("/api/search", data={"query": "naproxen", "db_source": "elsevier", "elsevier_api_key": PERSONAL_KEY})
-        self.assertEqual(r.status_code, 403)
-        self.quota.assert_not_called()
+        self.assertEqual(r.status_code, 200, r.text)
+        self.quota.assert_called_once()
+        worker = self.thread.call_args.kwargs["kwargs"]
+        self.assertTrue(worker["is_guest"])
+        self.assertEqual(worker["elsevier_api_key"], PERSONAL_KEY)
+        self.assertNotIn(PERSONAL_KEY, json.dumps(self.tasks))
 
-    def test_guest_custom_key_is_not_forwarded_to_worker(self):
+    def test_guest_custom_key_is_forwarded_for_comprehensive_search(self):
         r = self.client.post("/api/search", data={"query": "naproxen", "elsevier_api_key": PERSONAL_KEY})
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(self.thread.call_args.kwargs["kwargs"]["elsevier_api_key"], "")
+        self.assertEqual(self.thread.call_args.kwargs["kwargs"]["elsevier_api_key"], PERSONAL_KEY)
+
+    def test_comprehensive_time_mode_survives_guest_result_quota(self):
+        r = self.client.post("/api/search", data={"query": "climate", "limit": "999999"})
+        self.assertEqual(r.status_code, 200)
+        worker = self.thread.call_args.kwargs["kwargs"]
+        self.assertEqual(worker["limit"], 50)
+        self.assertTrue(worker["comprehensive_search"])
+        self.assertTrue(worker["is_guest"])
+
+    def test_access_code_personal_key_uses_normal_quota_and_queue(self):
+        with patch.object(app, "OTHER_PASSWORDS", {"TEST_ACCESS_CODE"}):
+            r = self.client.post("/api/search", data={"query": "climate", "password": "TEST_ACCESS_CODE", "db_source": "elsevier", "elsevier_api_key": PERSONAL_KEY})
+        self.assertEqual(r.status_code, 200, r.text)
+        worker = self.thread.call_args.kwargs["kwargs"]
+        self.assertTrue(worker["is_guest"])
+        self.assertTrue(worker["is_other"])
+        self.assertEqual(worker["elsevier_api_key"], PERSONAL_KEY)
+        self.assertTrue(self.quota.call_args.kwargs["is_other"])
 
     def test_repeated_search_resumes_existing_task_without_charging_again(self):
         first = self.client.post("/api/search", data={"query": "naproxen"})
