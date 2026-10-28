@@ -1858,7 +1858,7 @@
                 <option value="ar">العربية (RTL)</option>
                 <option value="en">English</option>
               </select>
-              <a id="download-user-guide" href=${`/api/user-guide/${guideLanguage}?v=20261029-3`} download=${`KnowledgeOcean_User_Guide_${guideLanguage.toUpperCase()}.pdf`} className="inline-flex items-center h-10 rounded-[12px] bg-teal-700 hover:bg-teal-800 px-4 text-white text-xs font-bold transition">
+              <a id="download-user-guide" href=${`/api/user-guide/${guideLanguage}?v=20261029-4`} download=${`KnowledgeOcean_User_Guide_${guideLanguage.toUpperCase()}.pdf`} className="inline-flex items-center h-10 rounded-[12px] bg-teal-700 hover:bg-teal-800 px-4 text-white text-xs font-bold transition">
                 ${lang === "ar" ? "تنزيل دليل الاستخدام (PDF)" : "Download User Guide (PDF)"}
               </a>
             </div>
@@ -2731,6 +2731,9 @@
                       <option value="250" className="bg-[#fcfaf8] dark:bg-[#1a1816]">${t.limit250}</option>
                       <option value="999999" className="bg-[#fcfaf8] dark:bg-[#1a1816]">${t.limitAll}</option>
                     </select>
+                    <p className="mt-2 text-[11px] opacity-70 leading-relaxed">
+                      ${lang === "ar" ? "مهلة جمع النتائج: 10 ثوانٍ × العدد المطلوب ضمن حصتك، أو 3 ساعات لخيار كل ما هو موجود. يتوقف عند 5 دقائق دون بحث مطابق جديد، أو عند بلوغ العدد أو نفاد المصادر. الانتظار وإعداد التقرير خارج هذه المهلة." : "Collection budget: 10 seconds × the requested count within your quota, or 3 hours for all available results. Stops after 5 minutes without a new matching record, when the count is met, or when sources are exhausted. Queueing and report generation are additional."}
+                    </p>
                   </div>
                 </div>
 

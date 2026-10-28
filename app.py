@@ -1011,6 +1011,38 @@ def _cleanup_task_files(user_space, safe_query="", ts="", pdf_files=None, pdf_zi
 # ─────────────────────────────────────────────────────────────────────────
 # خط المعالجة وإدارة الطابور
 # ─────────────────────────────────────────────────────────────────────────
+class SearchBudget:
+    """Collection deadlines, excluding queueing and report generation."""
+    SECONDS_PER_PAPER = 10
+    COMPREHENSIVE_SECONDS = 3 * 60 * 60
+    IDLE_SECONDS = 5 * 60
+
+    def __init__(self, target_limit: int, comprehensive: bool = False, clock=None):
+        self.clock = clock or time.monotonic
+        self.started_at = self.clock()
+        self.total_seconds = self.COMPREHENSIVE_SECONDS if comprehensive else max(1, int(target_limit)) * self.SECONDS_PER_PAPER
+        self.total_deadline = self.started_at + self.total_seconds
+        self.last_match_at = self.started_at
+
+    @property
+    def deadline(self):
+        return min(self.total_deadline, self.last_match_at + self.IDLE_SECONDS)
+
+    def record_match(self):
+        self.last_match_at = self.clock()
+
+    def remaining(self):
+        return max(0.0, self.deadline - self.clock())
+
+    def stop_reason(self):
+        now = self.clock()
+        if now >= self.total_deadline:
+            return "time_budget"
+        if now >= self.last_match_at + self.IDLE_SECONDS:
+            return "no_new_matches"
+        return None
+
+
 def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=False, download_fulltext=False, guest_ip="", guest_fp="", is_other=False, guest_token="", search_scope="all", doc_type_filter="all", **kwargs):
     if query:
         query = normalize_boolean_query(query.strip())
@@ -1069,7 +1101,7 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
 
     try:
         with_abstracts = bool(include_abstracts or download_fulltext)
-        process_pipeline(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=with_abstracts, guest_ip=guest_ip, guest_fp=guest_fp, guest_token=guest_token, is_other=is_other, search_scope=search_scope, doc_type_filter=doc_type_filter, elsevier_api_key=kwargs.get("elsevier_api_key", ""))
+        process_pipeline(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=with_abstracts, guest_ip=guest_ip, guest_fp=guest_fp, guest_token=guest_token, is_other=is_other, search_scope=search_scope, doc_type_filter=doc_type_filter, elsevier_api_key=kwargs.get("elsevier_api_key", ""), comprehensive_search=kwargs.get("comprehensive_search", False))
     finally:
         if not is_guest:
             with PREMIUM_LOCK:
@@ -1183,11 +1215,11 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                 return True
 
         round_no = 0
-        search_started = time.monotonic()
-        search_max_seconds = bounded_env_int("SEARCH_MAX_SECONDS", 90, 30, 150)
-        max_search_rounds = bounded_env_int("SEARCH_MAX_ROUNDS", 4, 2, 8)
-        _set_task(task_id, _search_deadline=search_started + search_max_seconds)
-        rounds_without_new_papers = 0
+        comprehensive_search = bool(kwargs.get("comprehensive_search", False) or unlimited)
+        budget = SearchBudget(target_limit, comprehensive=comprehensive_search and not is_exact_doi)
+        _set_task(task_id, _search_deadline=budget.deadline,
+                  search_budget_seconds=budget.total_seconds, search_idle_seconds=budget.IDLE_SECONDS)
+        finish_reason = "sources_exhausted"
         def provider_in_cooldown(name):
             # Scopus handles its own cooldown so it can explain entitlement and
             # quota failures to the caller without retrying the upstream API.
@@ -1196,12 +1228,13 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
             txt_file.write(f"Knowledge Ocean Exploration Log\nTopic: {query}\nDate: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n" + "="*70 + "\n\n")
 
             while len(paper_index) < target_limit:
-                if round_no >= max_search_rounds or time.monotonic() - search_started >= search_max_seconds:
-                    log.warning("Search budget reached for task %s: %s rounds, %s papers", task_id, round_no, len(paper_index))
+                if budget.stop_reason():
+                    finish_reason = budget.stop_reason()
+                    log.info("Search %s stopped (%s) after %s rounds with %s papers", task_id, finish_reason, round_no, len(paper_index))
                     break
-                before_count = len(paper_index)
                 round_no += 1
                 if task_id in CANCELLED_TASKS:
+                    finish_reason = "cancelled"
                     log.info(f"Task {task_id} cancellation detected in loop. Stopping search with {len(paper_index)} papers.")
                     break
 
@@ -1212,8 +1245,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                     if not active_this_round:
                         break
 
-                remaining_seconds = search_max_seconds - (time.monotonic() - search_started)
+                remaining_seconds = budget.remaining()
                 if remaining_seconds <= 0:
+                    finish_reason = budget.stop_reason() or "time_budget"
                     break
                 executor = ThreadPoolExecutor(max_workers=min(6, len(active_this_round)))
                 futures = {
@@ -1225,7 +1259,10 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                 }
 
                 try:
-                    for fut in as_completed(futures, timeout=min(12 if target_limit <= 10 else 22, max(1, remaining_seconds))):
+                    for fut in as_completed(futures, timeout=min(12 if target_limit <= 10 else 22, max(0.001, remaining_seconds))):
+                        if budget.stop_reason():
+                            finish_reason = budget.stop_reason()
+                            break
                         if task_id in CANCELLED_TASKS:
                             log.info(f"Task {task_id} cancellation detected in futures. Breaking out.")
                             break
@@ -1239,6 +1276,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                             if engine_states[eng_name].get("warning"):
                                 provider_diagnostics[eng_name]["warning"] = engine_states[eng_name]["warning"]
                             for p in batch_papers:
+                                if budget.stop_reason():
+                                    finish_reason = budget.stop_reason()
+                                    break
                                 if not isinstance(p, CanonicalPaper):
                                     continue
                                 if task_id in CANCELLED_TASKS:
@@ -1260,7 +1300,15 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                                     continue
 
                                 # P1.3 & P1.4: Add or merge into canonical index
+                                previous_count = len(paper_index)
                                 canonical = paper_index.add_or_merge(p)
+                                if len(paper_index) > previous_count:
+                                    budget.record_match()
+                                    # Refresh in-flight network waiters without
+                                    # writing SQLite once per accepted record.
+                                    with TASKS_LOCK:
+                                        if task_id in TASKS:
+                                            TASKS[task_id]["_search_deadline"] = budget.deadline
 
                                 txt_entry = f"[{len(paper_index)}] ({canonical.year}) {canonical.title}\n"
                                 txt_entry += f"    Authors: {format_authors(canonical.authors)}\n"
@@ -1294,24 +1342,20 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                     executor.shutdown(wait=False, cancel_futures=True)
 
                 if task_id in CANCELLED_TASKS:
+                    finish_reason = "cancelled"
                     log.info(f"Task {task_id} cancellation detected after batch. Exiting search loop with {len(paper_index)} papers.")
                     break
 
                 if len(paper_index) >= target_limit:
-                    break
-                if len(paper_index) <= before_count:
-                    rounds_without_new_papers += 1
-                else:
-                    rounds_without_new_papers = 0
-                if rounds_without_new_papers >= 2:
-                    log.warning("Stopping task %s: two search rounds without new papers", task_id)
+                    finish_reason = "target_reached"
                     break
 
                 pct = min(75, 15 + int((len(paper_index) / target_limit) * 60)) if not unlimited else min(75, 15 + round_no * 10)
-                _set_task(task_id, progress=pct, message=f"تم جمع وتدقيق {len(paper_index)} من أصل {target_limit} بحث...")
+                goal = "" if unlimited else f" من أصل {target_limit}"
+                _set_task(task_id, progress=pct, message=f"تم جمع وتدقيق {len(paper_index)}{goal} بحث...", _search_deadline=budget.deadline)
 
         provider_warnings = [info["warning"] for info in provider_diagnostics.values() if info.get("warning")]
-        _set_task(task_id, provider_diagnostics=provider_diagnostics, provider_warnings=provider_warnings)
+        _set_task(task_id, provider_diagnostics=provider_diagnostics, provider_warnings=provider_warnings, finish_reason=finish_reason)
         all_canonical = paper_index.get_all()
         if not all_canonical:
             if task_id in CANCELLED_TASKS:
@@ -1927,6 +1971,7 @@ async def start_search(
         return JSONResponse(status_code=400, content={"error": "في وضع الباحث، اكتب الاسم بالأحرف الإنجليزية فقط."})
     if is_doi_query(query):
         limit = 1
+    comprehensive_search = limit >= 999999
     with_abstracts = bool(include_abstracts or download_fulltext)
     ip, browser_fp = get_fingerprint(request)
     is_banned, ban_remaining = db_check_ip_ban(ip)
@@ -2082,7 +2127,8 @@ async def start_search(
         "guest_token": clean_guest_token if is_guest else "",
         "search_scope": search_scope,
         "doc_type_filter": doc_type_filter,
-        "elsevier_api_key": elsevier_api_key
+        "elsevier_api_key": elsevier_api_key,
+        "comprehensive_search": comprehensive_search
     }, daemon=True).start()
     return response
 

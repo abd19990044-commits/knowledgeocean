@@ -90,6 +90,14 @@ class RequestSafetyTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(self.thread.call_args.kwargs["kwargs"]["elsevier_api_key"], PERSONAL_KEY)
 
+    def test_comprehensive_time_mode_survives_guest_result_quota(self):
+        r = self.client.post("/api/search", data={"query": "climate", "limit": "999999"})
+        self.assertEqual(r.status_code, 200)
+        worker = self.thread.call_args.kwargs["kwargs"]
+        self.assertEqual(worker["limit"], 50)
+        self.assertTrue(worker["comprehensive_search"])
+        self.assertTrue(worker["is_guest"])
+
     def test_access_code_personal_key_uses_normal_quota_and_queue(self):
         with patch.object(app, "OTHER_PASSWORDS", {"TEST_ACCESS_CODE"}):
             r = self.client.post("/api/search", data={"query": "climate", "password": "TEST_ACCESS_CODE", "db_source": "elsevier", "elsevier_api_key": PERSONAL_KEY})

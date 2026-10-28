@@ -54,8 +54,8 @@
           "تُضبط السنوات من الأقدم إلى الأحدث، ويُختار نطاق الأبحاث أو الكتب أو كليهما. وتتيح تصفية نوع الوثيقة تمييز المراجعات والتحليلات التجميعية والأبحاث الأصلية والمؤتمرات. ويُفعَّل إدراج المسودات بحسب متطلبات الدراسة."
         ],
         [
-          "تقييم كفاية الاسترجاع",
-          "تزيد مطابقة العنوان الإلزامية من تقييد النتائج. وعند انخفاض الاسترجاع تُراجع المصطلحات والفترة الزمنية والمرشحات. العدد المحدد هدف للاسترجاع، وقد يُسترجع عدد أقل بسبب تغطية المصدر أو انتهاء المهلة."
+          "حدود الاسترجاع الزمنية",
+          "تبلغ مهلة جمع النتائج 10 ثوانٍ لكل سجل مطلوب ضمن الحصة المتاحة، وبحد أقصى 3 ساعات لخيار «كل ما هو موجود». ويتوقف الجمع عند مرور 5 دقائق دون سجل مطابق جديد غير مكرر، أو اكتمال العدد، أو نفاد المصادر؛ ويُطبَّق الحد الأسبق. لا تشمل هذه المهلة انتظار الدور أو إعداد التقرير، وقد يكون العدد المسترجع أقل من المطلوب."
         ]
       ]
     ],
@@ -239,8 +239,8 @@
           "Enter publication years in chronological order and select papers, books, or both. Document-type filters distinguish reviews, meta-analyses, original research, and conference papers. Include preprints when appropriate to the study design."
         ],
         [
-          "Assessing retrieval adequacy",
-          "Strict title matching narrows retrieval. Sparse results warrant review of terminology, dates, and filters. The requested count is a retrieval target; provider coverage, access limits, and time budgets may yield fewer records."
+          "Retrieval time limits",
+          "Collection allows 10 seconds per requested record within the available quota, or at most 3 hours for all available results. It stops after 5 minutes without a new, unique matching record, when the requested count is met, or when sources are exhausted; the earliest limit applies. Queueing and report generation are additional. Retrieval may yield fewer records than requested."
         ]
       ]
     ],

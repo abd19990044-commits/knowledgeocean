@@ -33,3 +33,8 @@ Check guests and Access Code holders can use only their own Scopus keys, VIP can
 - STANDARD metadata only, at most 25 records per call, no hidden transport retries, and at least two seconds between Scopus calls per running instance.
 - Honor X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, and X-ELS-Status independently per key. Do not assume a universal free-account quota.
 - Report access denials and exhausted quota without falling back to another credential. Personal keys never upgrade platform quota or priority.
+## Search collection budgets
+- Numeric requests allow 10 seconds per requested record after the result quota is applied. The all-available option allows at most 3 hours, including when its result count is capped by the guest or Access Code quota.
+- Both modes stop after 5 minutes without a newly accepted, unique matching record. Duplicates, rejected records, and provider responses without matches do not reset this clock.
+- The earliest deadline applies. Target completion, exhausted sources, and cancellation can stop collection earlier; partial results remain exportable and existing unused-quota refunds apply.
+- Queue waiting and report generation are outside collection budgets. Individual provider request timeouts and Scopus rate-limit controls remain in force; collection has no fixed four-round or two-empty-round cutoff.

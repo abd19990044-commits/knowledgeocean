@@ -1,6 +1,7 @@
 """Regression tests for passcode-list configuration and bounded search loops."""
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 import app
@@ -13,10 +14,8 @@ class PasscodeAndSearchTests(unittest.TestCase):
                 self.assertTrue(app.verify_password("VIP_SECOND"))
                 self.assertFalse(app.verify_password("VIP_THIRD"))
     def test_guest_queue_has_bounded_wait(self):
-        src = open(app.__file__, encoding="utf-8").read()
+        src = Path(app.__file__).read_text(encoding="utf-8")
         self.assertIn("SEARCH_QUEUE_MAX_SECONDS", src)
-        self.assertIn("SEARCH_MAX_ROUNDS", src)
-        self.assertIn("rounds_without_new_papers >= 2", src)
     def test_login_with_comma_separated_vip(self):
         with patch.dict(os.environ, {"APP_PASSWORD": "ALPHA,BETA"}), patch.object(app, "db_check_ip_ban", return_value=(False,0)), patch.object(app, "db_record_auth_attempt", return_value=(False,5,0)):
             with TestClient(app.app, base_url="https://testserver") as client:
