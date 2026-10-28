@@ -171,7 +171,11 @@ SECONDARY_SEARCH_QUOTA = 250  # 250 standard searches or 125 with summaries for 
 
 def get_fingerprint(request: Request):
     client_host = request.client.host if request.client else "127.0.0.1"
-    raw_ip = request.headers.get("cf-connecting-ip") or request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for") or client_host
+    # Only accept proxy-forwarded client addresses from explicitly trusted peers.
+    trusted = {x.strip() for x in os.environ.get("TRUSTED_PROXY_IPS", "").split(",") if x.strip()}
+    raw_ip = client_host
+    if client_host in trusted:
+        raw_ip = request.headers.get("cf-connecting-ip") or request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for") or client_host
     ip = raw_ip.split(",")[0].strip()
     ua = request.headers.get("user-agent", "")
     al = request.headers.get("accept-language", "")
@@ -204,11 +208,10 @@ def check_guest_search_quota(ip: str, browser_fp: str, units_to_consume: int = 1
     fp_key = f"{prefix}fp_{browser_fp}"
 
     if tok_key:
+        # Independent browser tokens must not share a single user quota merely
+        # because their User-Agent / language headers match.
         lim_tok, rem_tok = db_check_rate_limit(tok_key, today, units_to_consume, limit)
-        lim_fp, rem_fp = db_check_rate_limit(fp_key, today, units_to_consume, limit)
-        if lim_tok or lim_fp:
-            return True, min(rem_tok, rem_fp)
-        return False, min(rem_tok, rem_fp)
+        return lim_tok, rem_tok
     else:
         lim_fp, rem_fp = db_check_rate_limit(fp_key, today, units_to_consume, limit)
         if lim_fp:
@@ -225,9 +228,7 @@ def get_guest_remaining_quota(ip: str, browser_fp: str, is_other: bool = False, 
     fp_key = f"{prefix}fp_{browser_fp}"
 
     if tok_key:
-        rem_tok = db_get_remaining_quota(tok_key, today, limit)
-        rem_fp = db_get_remaining_quota(fp_key, today, limit)
-        return min(rem_tok, rem_fp)
+        return db_get_remaining_quota(tok_key, today, limit)
     else:
         return db_get_remaining_quota(fp_key, today, limit)
 
@@ -237,9 +238,7 @@ def refund_guest_search_quota(ip: str, browser_fp: str, refund_units: int, is_ot
         return
     today = get_baghdad_today()
     prefix = "sec_" if is_other else ""
-    keys = [f"{prefix}fp_{browser_fp}"]
-    if guest_token:
-        keys.append(f"{prefix}tok_{guest_token}")
+    keys = [f"{prefix}tok_{guest_token}"] if guest_token else [f"{prefix}fp_{browser_fp}"]
     db_refund_quota(keys, today, refund_units)
 
 def is_rate_limited(ip: str, browser_fp: str, requested_units: int = 1, guest_token: str = ""):
