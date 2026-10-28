@@ -1975,7 +1975,7 @@ async def start_search(
     }, daemon=True).start()
     return response
 
-@app.api_route("/api/cancel/{task_id}", methods=["GET", "POST"])
+@app.post("/api/cancel/{task_id}")
 async def cancel_task(task_id: str, request: Request):
     require_same_origin(request)
     task_info = TASKS.get(task_id) or db_get_task(task_id)
