@@ -1,3 +1,0 @@
-2026-09-12 03:25:17,743 [INFO] AcademicAPI: ⚙️ Loaded local configuration from G:\محيط المعرفة\config.txt: {'UNPAYWALL_EMAIL': 'contact@example.com', 'ELSEVIER_API_KEY': '', 'LOW_GPU_MODE': 'true'}
-2026-09-12 03:25:17,778 [INFO] KnowledgeOceanDesktop: ⚡ Low-GPU Energy Saver Mode active (GPU offloaded to lightweight CPU software rasterization)
-Imports successful! All local modules loaded cleanly.
