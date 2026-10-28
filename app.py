@@ -1138,6 +1138,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
 
         # P1: ScholarlyPaperIndex for lossless record linkage and deduplication
         paper_index = ScholarlyPaperIndex()
+        provider_diagnostics = {}
 
         y_from = int(year_from) if str(year_from or '').strip().isdigit() else None
         y_to = int(year_to) if str(year_to or '').strip().isdigit() else None
@@ -1186,6 +1187,10 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                         eng_name = futures[fut]
                         try:
                             batch_papers = fut.result()
+                            provider_diagnostics[eng_name] = {
+                                "returned": provider_diagnostics.get(eng_name, {}).get("returned", 0) + len(batch_papers or []),
+                                "status": "responded"
+                            }
                             for p in batch_papers:
                                 if not isinstance(p, CanonicalPaper):
                                     continue
@@ -1220,12 +1225,18 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                                 if (len(paper_index) >= target_limit and not is_exact_doi) or task_id in CANCELLED_TASKS:
                                     break
                         except Exception as e:
-                            log.warning(f"Engine {eng_name} batch error: {e}")
+                            provider_diagnostics[eng_name] = {"status": "error", "error_type": type(e).__name__}
+                            log.exception("Engine %s batch error in task %s", eng_name, task_id)
 
                         if task_id in CANCELLED_TASKS:
                             break
+                except TimeoutError:
+                    pending = [name for future, name in futures.items() if not future.done()]
+                    for name in pending:
+                        provider_diagnostics[name] = {"status": "timeout"}
+                    log.warning("Search task %s timed out waiting for providers: %s", task_id, pending)
                 except Exception:
-                    pass
+                    log.exception("Search task %s failed during provider collection", task_id)
                 finally:
                     executor.shutdown(wait=False, cancel_futures=True)
 
@@ -1243,7 +1254,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         if not all_canonical:
             if task_id in CANCELLED_TASKS:
                 raise ValueError("تم إيقاف البحث بناءً على طلبك (لم يتم العثور على أبحاث بعد).")
-            raise ValueError("لم يُعثر على أبحاث تطابق شروط الاستعلام المحددة بعد فحص كافة القواعد.")
+            detail = ", ".join(f"{name}: {info.get('status', 'unknown')} ({info.get('returned', 0)})" for name, info in sorted(provider_diagnostics.items()))
+            log.warning("Task %s returned no qualifying papers. Providers: %s", task_id, detail or "no providers returned")
+            raise ValueError("لم يتم استرجاع أوراق علمية مطابقة. قد تكون قواعد البيانات غير متاحة أو شروط البحث شديدة التقييد. راجع سجلات المزودين. / No matching papers retrieved; provider errors or restrictive filters may be responsible.")
 
         # Ensure exact DOI result has enriched authors, real year, and substantive title
         if is_exact_doi and all_canonical:
