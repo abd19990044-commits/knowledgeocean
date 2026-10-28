@@ -63,14 +63,23 @@ def load_local_config(config_path: str = DEFAULT_CONFIG_FILENAME) -> dict:
                     loaded[target_key] = os.environ.get(target_key, "")
 
         if loaded:
-            if not (os.environ.get("SPACE_ID") or os.environ.get("HF_SPACE")):
-                os.environ["LOCAL_INSTANCE"] = "1"
-            masked = {k: ("***" if ("PASS" in k or "KEY" in k) and v else v) for k, v in loaded.items()}
-            log.info(f"⚙️ Loaded local configuration from {config_path}: {masked}")
+            # Local access must be explicitly opted into with LOCAL_INSTANCE=1.
+            # Never log values: arbitrary config keys may contain credentials.
+            log.info("Loaded configuration keys from %s: %s", config_path, ", ".join(sorted(loaded)))
     except Exception as e:
         log.warning(f"Failed to read local {config_path}: {e}")
 
     return loaded
+
+
+def bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    """Treat malformed optional deployment settings as their documented default."""
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        log.warning("Invalid integer setting %s; using default %s", name, default)
+        value = default
+    return max(minimum, min(maximum, value))
 
 def kill_port_occupants(port: int = 7860) -> list:
     """Find and terminate any orphaned/ghost processes holding the server port."""

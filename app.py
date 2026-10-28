@@ -59,7 +59,8 @@ from models import CanonicalPaper, is_preprint_record
 from dedup import ScholarlyPaperIndex, is_banned_publication
 from ranking import matches_target_query, score_paper_relevance, normalize_title_for_matching, calculate_accurate_title_similarity, matches_doc_type_filter, matches_search_scope
 from scholarly_registry import search_verified_registry, format_strict_apa_7th
-from config_loader import load_local_config, kill_port_occupants
+from config_loader import load_local_config, kill_port_occupants, bounded_env_int
+from starlette.concurrency import run_in_threadpool
 
 load_local_config()
 from network import (
@@ -1014,7 +1015,10 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
     if query:
         query = normalize_boolean_query(query.strip())
     queued_at = time.monotonic()
-    max_queue_wait = max(20, min(180, int(os.environ.get("SEARCH_QUEUE_MAX_SECONDS", "75"))))
+    max_queue_wait = bounded_env_int("SEARCH_QUEUE_MAX_SECONDS", 75, 20, 180)
+    def refund_unstarted():
+        if is_guest and guest_ip and guest_fp:
+            refund_guest_search_quota(guest_ip, guest_fp, limit * (2 if include_abstracts or download_fulltext else 1), is_other=is_other, guest_token=guest_token)
     global PREMIUM_USERS_COUNT
     if not is_guest:
         with PREMIUM_LOCK:
@@ -1025,6 +1029,7 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
         with QUEUE_LOCK:
             if len(GUEST_QUEUE) >= 100:
                 _set_task(task_id, status="error", error="الطابور ممتلئ حالياً (100 مستخدم في الانتظار). يرجى المحاولة لاحقاً.")
+                refund_unstarted()
                 return
             if task_id not in GUEST_QUEUE and task_id not in ACTIVE_GUESTS:
                 if len(ACTIVE_GUESTS) < 5 and PREMIUM_USERS_COUNT == 0 and len(GUEST_QUEUE) == 0:
@@ -1039,6 +1044,7 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
                     if task_id in GUEST_QUEUE:
                         GUEST_QUEUE.remove(task_id)
                     ACTIVE_GUESTS.discard(task_id)
+                refund_unstarted()
                 return
             if task_id in CANCELLED_TASKS:
                 with QUEUE_LOCK:
@@ -1046,6 +1052,7 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
                         GUEST_QUEUE.remove(task_id)
                     if task_id in ACTIVE_GUESTS:
                         ACTIVE_GUESTS.remove(task_id)
+                refund_unstarted()
                 return
 
             with QUEUE_LOCK:
@@ -1062,7 +1069,7 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
 
     try:
         with_abstracts = bool(include_abstracts or download_fulltext)
-        process_pipeline(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=with_abstracts, guest_ip=guest_ip, guest_fp=guest_fp, guest_token=guest_token, is_other=is_other, search_scope=search_scope, doc_type_filter=doc_type_filter)
+        process_pipeline(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=with_abstracts, guest_ip=guest_ip, guest_fp=guest_fp, guest_token=guest_token, is_other=is_other, search_scope=search_scope, doc_type_filter=doc_type_filter, elsevier_api_key=kwargs.get("elsevier_api_key", ""))
     finally:
         if not is_guest:
             with PREMIUM_LOCK:
@@ -1079,6 +1086,8 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
 
 def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliation="", uh="default", task_id="", require_title=False, year_from=None, year_to=None, include_preprint=True, is_guest=False, include_abstracts=False, download_fulltext=False, guest_ip="", guest_fp="", is_other=False, search_scope="all", doc_type_filter="all", **kwargs):
     guest_token = kwargs.get("guest_token", "")
+    # Request-scoped credentials stay in memory, never in task data or SQLite.
+    personal_elsevier_key = (kwargs.get("elsevier_api_key") or "").strip() if not is_guest else ""
     with_abstracts = bool(include_abstracts or download_fulltext or kwargs.get("with_abstracts", False))
     if query:
         query = normalize_boolean_query(query.strip())
@@ -1088,6 +1097,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         task_id = kwargs["task_id"]
     if "is_vip" in kwargs:
         is_guest = not bool(kwargs["is_vip"])
+    quota_refunded = 0
     try:
         _check_cancelled(task_id)
         _set_task(task_id, status="processing", progress=15, message="بدء مسح وتدقيق الأبحاث عبر المحركات الأكاديمية...")
@@ -1114,7 +1124,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         elif db_source == 'all':
             fast_priority = ['verified_literature', 'pubmed', 'crossref', 'openalex', 'europepmc', 'doaj', 'semanticscholar', 'core', 'zenodo']
             # The licensed Elsevier API is included in comprehensive searches only for VIP.
-            if not is_guest and (os.environ.get('ELSEVIER_API_KEY', '').strip() or ELSEVIER_API_KEY):
+            if not is_guest and (personal_elsevier_key or os.environ.get('ELSEVIER_API_KEY', '').strip() or ELSEVIER_API_KEY):
                 fast_priority.append('elsevier')
             if search_scope != 'papers':
                 fast_priority.extend(['googlebooks', 'openlibrary'])
@@ -1172,9 +1182,13 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
 
         round_no = 0
         search_started = time.monotonic()
-        search_max_seconds = max(30, min(150, int(os.environ.get("SEARCH_MAX_SECONDS", "90"))))
-        max_search_rounds = max(2, min(8, int(os.environ.get("SEARCH_MAX_ROUNDS", "4"))))
+        search_max_seconds = bounded_env_int("SEARCH_MAX_SECONDS", 90, 30, 150)
+        max_search_rounds = bounded_env_int("SEARCH_MAX_ROUNDS", 4, 2, 8)
+        _set_task(task_id, _search_deadline=search_started + search_max_seconds)
         rounds_without_new_papers = 0
+        def provider_in_cooldown(name):
+            circuit = "elsevier:" + hashlib.sha256(personal_elsevier_key.encode()).hexdigest() if name == "elsevier" and personal_elsevier_key else name
+            return is_engine_in_cooldown(circuit)
         with open(txt_path, "w", encoding="utf-8") as txt_file:
             txt_file.write(f"Knowledge Ocean Exploration Log\nTopic: {query}\nDate: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n" + "="*70 + "\n\n")
 
@@ -1189,9 +1203,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                     break
 
                 engines_to_run = initial_engines if (round_no == 1 and target_limit <= 10) else active
-                active_this_round = [name for name in engines_to_run if not engine_states[name]['exhausted'] and not is_engine_in_cooldown(name)]
+                active_this_round = [name for name in engines_to_run if not engine_states[name]['exhausted'] and not provider_in_cooldown(name)]
                 if not active_this_round:
-                    active_this_round = [name for name in active if not engine_states[name]['exhausted'] and not is_engine_in_cooldown(name)]
+                    active_this_round = [name for name in active if not engine_states[name]['exhausted'] and not provider_in_cooldown(name)]
                     if not active_this_round:
                         break
 
@@ -1200,7 +1214,10 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                     break
                 executor = ThreadPoolExecutor(max_workers=min(6, len(active_this_round)))
                 futures = {
-                    executor.submit(FETCH_BATCH_MAP[name], query, engine_states[name], mode, affiliation, task_id, is_guest, batch_size): name
+                    executor.submit(
+                        FETCH_BATCH_MAP[name], query, engine_states[name], mode, affiliation, task_id, is_guest, batch_size,
+                        **({"api_key": personal_elsevier_key} if name == "elsevier" and personal_elsevier_key else {})
+                    ): name
                     for name in active_this_round
                 }
 
@@ -1234,6 +1251,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                                 if mode != "author" and not matches_target_query(query, p.title, p.abstract, require_title=require_title, doi=p.doi):
                                     continue
 
+                                if not matches_search_scope(p, search_scope) or not matches_doc_type_filter(p, doc_type_filter):
+                                    continue
+
                                 # P1.3 & P1.4: Add or merge into canonical index
                                 canonical = paper_index.add_or_merge(p)
 
@@ -1259,6 +1279,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                     pending = [name for future, name in futures.items() if not future.done()]
                     for name in pending:
                         provider_diagnostics[name] = {"status": "timeout"}
+                        # The old worker may still be finishing. Do not launch
+                        # another worker against the same mutable paging state.
+                        engine_states[name]['exhausted'] = True
                     log.warning("Search task %s timed out waiting for providers: %s", task_id, pending)
                 except Exception:
                     log.exception("Search task %s failed during provider collection", task_id)
@@ -1386,7 +1409,8 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
 
         if is_guest and len(final_papers) < target_limit and guest_ip and guest_fp:
             unused_papers = target_limit - len(final_papers)
-            refund_guest_search_quota(guest_ip, guest_fp, unused_papers * (2 if with_abstracts else 1), is_other=is_other, guest_token=guest_token if "guest_token" in locals() else "")
+            quota_refunded = unused_papers * (2 if with_abstracts else 1)
+            refund_guest_search_quota(guest_ip, guest_fp, quota_refunded, is_other=is_other, guest_token=guest_token)
 
         pdf_files = []
         is_stopped = bool(task_id in CANCELLED_TASKS)
@@ -1593,11 +1617,10 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         clean_pdf_zip = pdf_zip if 'pdf_zip' in locals() else None
         _cleanup_task_files(clean_user_space, clean_safe_query, clean_ts, clean_pdf_files, clean_pdf_zip)
 
-        if is_guest and guest_ip and guest_fp and 'final_papers' not in locals():
+        if is_guest and guest_ip and guest_fp:
             try:
-                target_limit_val = target_limit if 'target_limit' in locals() else limit
-                with_abs_val = with_abstracts if 'with_abstracts' in locals() else False
-                refund_guest_search_quota(guest_ip, guest_fp, target_limit_val * (2 if with_abs_val else 1), is_other=is_other if 'is_other' in locals() else False, guest_token=guest_token if 'guest_token' in locals() else "")
+                refund_units = max(0, int(limit) * (2 if with_abstracts else 1) - quota_refunded)
+                refund_guest_search_quota(guest_ip, guest_fp, refund_units, is_other=is_other, guest_token=guest_token)
             except Exception:
                 pass
 
@@ -1711,6 +1734,7 @@ async def api_login(request: Request):
     """
     تسجيل الدخول بالرمز الثانوي أو رمز VIP مع حظر IP لمدة 24 ساعة بعد 5 محاولات خاطئة متتالية.
     """
+    require_same_origin(request)
     ip, _ = get_fingerprint(request)
     is_banned, remaining = db_check_ip_ban(ip)
     if is_banned:
@@ -1820,9 +1844,24 @@ async def get_hero_image():
 async def health_check():
     return PlainTextResponse("OK", status_code=200)
 
-@app.get("/api/heartbeat")
-async def api_heartbeat(tab_id: str = ""):
-    return {"status": "ok", "tab_id": tab_id}
+
+@app.api_route("/api/user-guide/{language}", methods=["GET", "HEAD"])
+async def download_user_guide(language: str):
+    filenames = {
+        "ar": "KnowledgeOcean_User_Guide_AR.pdf",
+        "en": "KnowledgeOcean_User_Guide_EN.pdf",
+    }
+    filename = filenames.get(language)
+    if filename is None:
+        raise HTTPException(404, "User guide language not available")
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "guides", filename)
+    if not os.path.isfile(path):
+        raise HTTPException(503, "User guide temporarily unavailable")
+    return FileResponse(path, media_type="application/pdf", filename=filename, headers={
+        "Content-Language": language,
+        "Cache-Control": "public, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+    })
 
 @app.get("/api/settings")
 async def get_settings(request: Request):
@@ -1850,11 +1889,35 @@ async def head_root():
 @app.post("/api/search")
 async def start_search(
     request: Request, password: str = Form(""), query: str = Form(...), mode: str = Form("keyword"), db_source: str = Form("all"),
-    limit: int = Form(10), affiliation: str = Form(""), require_title: bool = Form(False), year_from: str = Form(None), year_to: str = Form(None), include_preprint: bool = Form(False),
+    limit: int = Form(10, ge=1, le=999999), affiliation: str = Form("", max_length=500), require_title: bool = Form(False), year_from: str = Form(None), year_to: str = Form(None), include_preprint: bool = Form(False),
     include_abstracts: bool = Form(False), download_fulltext: bool = Form(False), guest_token: str = Form(""),
-    search_scope: str = Form("all"), doc_type_filter: str = Form("all")
+    search_scope: str = Form("all"), doc_type_filter: str = Form("all"),
+    elsevier_api_key: str = Form("", max_length=256)
 ):
     require_same_origin(request)
+    elsevier_api_key = elsevier_api_key.strip()
+    if elsevier_api_key and not re.fullmatch(r"[A-Za-z0-9_-]{16,256}", elsevier_api_key):
+        raise HTTPException(400, "Invalid Elsevier API key format")
+    query = query.strip()
+    if not 3 <= len(query) <= 2000:
+        return JSONResponse(status_code=400, content={"error": "مصطلح البحث يجب أن يتكون من 3 إلى 2000 حرف."})
+    if mode not in {"keyword", "author", "exact"}:
+        raise HTTPException(400, "Invalid search mode")
+    if db_source not in set(FETCH_BATCH_MAP) | {"all", "books"}:
+        raise HTTPException(400, "Invalid database source")
+    if search_scope not in {"all", "papers", "books"}:
+        raise HTTPException(400, "Invalid search scope")
+    if doc_type_filter not in {"all", "review", "meta_analysis", "research", "book", "conference"}:
+        raise HTTPException(400, "Invalid document type")
+    for year in (year_from, year_to):
+        if year and (not year.isascii() or not year.isdigit() or not 1000 <= int(year) <= 9999):
+            raise HTTPException(400, "Invalid publication year")
+    if year_from and year_to and int(year_from) > int(year_to):
+        raise HTTPException(400, "Publication year range is reversed")
+    if mode == "author" and any(ord(c) > 127 for c in query):
+        return JSONResponse(status_code=400, content={"error": "في وضع الباحث، اكتب الاسم بالأحرف الإنجليزية فقط."})
+    if is_doi_query(query):
+        limit = 1
     with_abstracts = bool(include_abstracts or download_fulltext)
     ip, browser_fp = get_fingerprint(request)
     is_banned, ban_remaining = db_check_ip_ban(ip)
@@ -1902,6 +1965,24 @@ async def start_search(
     is_vip = verify_password(password) or bool(owner_session and any(hmac.compare_digest(owner_session, user_hash_for(p)) for p in APP_PASSWORDS))
     is_other = (not is_vip) and (verify_other_password(password) or bool(owner_session and any(hmac.compare_digest(owner_session, user_hash_for(p)) for p in OTHER_PASSWORDS)))
     is_guest = not is_vip
+
+    # Validate licensed-provider access before charging any guest quota.
+    if db_source == "elsevier" and not is_vip:
+        return JSONResponse(status_code=403, content={"error": "قاعدة بيانات Scopus (Elsevier) تتطلب مفتاح الوصول (VIP)."})
+
+    if is_vip or is_other:
+        prospective_owner = user_hash_for(clean_pwd) if clean_pwd else owner_session
+    elif is_local_instance(request):
+        prospective_owner = "local_user"
+    else:
+        prospective_owner = hashlib.sha256(
+            (f"guest_{clean_guest_token}_{browser_fp}" if clean_guest_token else f"{ip}_{browser_fp}").encode()
+        ).hexdigest()[:16]
+    active_task = find_active_task_for_key(uh=prospective_owner)
+    if active_task.get("has_active_task"):
+        response = JSONResponse({"task_id": active_task["task_id"], "user_hash": prospective_owner, "resumed": True})
+        issue_session(response, prospective_owner, secure=request.url.scheme == "https")
+        return response
 
     # On local instances, grant full open access with zero restrictions and without requiring any passcode!
     if is_local_instance(request):
@@ -1961,15 +2042,6 @@ async def start_search(
         else:
             uh = user_hash_for(password) if password and verify_password(password) else owner_session
 
-    if not query.strip():
-        return JSONResponse(status_code=400, content={"error": "مصطلح البحث فارغ."})
-    if len(query.strip()) < 3:
-        return JSONResponse(status_code=400, content={"error": "مصطلح البحث قصير جداً (3 أحرف على الأقل)."})
-    if db_source == "elsevier" and not is_vip:
-        return JSONResponse(status_code=403, content={"error": "قاعدة بيانات Scopus (Elsevier) غير متاحة للضيوف وتتطلب إدخال مفتاح الوصول (VIP) أو استخدام النسخة المحلية."})
-    if mode == "author" and any(ord(c) > 127 for c in query):
-        return JSONResponse(status_code=400, content={"error": "في وضع الباحث، اكتب الاسم بالأحرف الإنجليزية فقط."})
-
     task_id = str(uuid.uuid4())
     code_hash = hashlib.sha256(password.strip().encode("utf-8")).hexdigest()[:24] if password.strip() else ""
     _set_task(task_id, status="queued", progress=0, message="في الطابور…",
@@ -2000,7 +2072,8 @@ async def start_search(
         "is_other": is_other if is_guest else False,
         "guest_token": clean_guest_token if is_guest else "",
         "search_scope": search_scope,
-        "doc_type_filter": doc_type_filter
+        "doc_type_filter": doc_type_filter,
+        "elsevier_api_key": elsevier_api_key if is_vip else ""
     }, daemon=True).start()
     return response
 
@@ -2145,7 +2218,7 @@ async def api_doi_lookup(request: Request, doi: str = Form(None), password: str 
     # 1. استعلام Crossref
     try:
         cr_url = f"https://api.crossref.org/works/{urllib.parse.quote(clean_doi)}"
-        cr_res = requests.get(cr_url, headers=headers, timeout=8)
+        cr_res = await run_in_threadpool(requests.get, cr_url, headers=headers, timeout=8)
         if cr_res.status_code == 200:
             msg = cr_res.json().get("message", {})
             titles = msg.get("title", [])
@@ -2172,7 +2245,7 @@ async def api_doi_lookup(request: Request, doi: str = Form(None), password: str 
     # 2. استعلام Unpaywall للتحقق من الوصول المفتوح ورابط PDF المباشر
     try:
         upw_url = f"https://api.unpaywall.org/v2/{clean_doi}?email={UNPAYWALL_EMAIL}"
-        upw_res = requests.get(upw_url, headers=headers, timeout=6)
+        upw_res = await run_in_threadpool(requests.get, upw_url, headers=headers, timeout=6)
         if upw_res.status_code == 200:
             upw_data = upw_res.json()
             paper_data["is_oa"] = upw_data.get("is_oa", False)
@@ -2193,7 +2266,7 @@ async def api_doi_lookup(request: Request, doi: str = Form(None), password: str 
     if needs_data():
         try:
             oa_url = f"https://api.openalex.org/works/https://doi.org/{clean_doi}"
-            oa_res = requests.get(oa_url, headers=headers, timeout=6)
+            oa_res = await run_in_threadpool(requests.get, oa_url, headers=headers, timeout=6)
             if oa_res.status_code == 200:
                 oa_data = oa_res.json()
                 if not paper_data["title"] and oa_data.get("title"):
@@ -2250,7 +2323,7 @@ async def api_doi_lookup(request: Request, doi: str = Form(None), password: str 
             if SEMANTIC_SCHOLAR_API_KEY:
                 s2_headers["x-api-key"] = SEMANTIC_SCHOLAR_API_KEY
             s2_url = f"https://api.semanticscholar.org/graph/v1/paper/{clean_doi}?fields=title,abstract,year,authors,venue,publicationVenue,openAccessPdf,citationCount,publicationTypes,journal"
-            s2_res = requests.get(s2_url, headers=s2_headers, timeout=6)
+            s2_res = await run_in_threadpool(requests.get, s2_url, headers=s2_headers, timeout=6)
             if s2_res.status_code == 200:
                 s2_data = s2_res.json()
                 if not paper_data["title"] and s2_data.get("title"):
@@ -2284,7 +2357,7 @@ async def api_doi_lookup(request: Request, doi: str = Form(None), password: str 
     if needs_data():
         try:
             epmc_url = f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:"{urllib.parse.quote(clean_doi)}"&format=json&resultType=core'
-            epmc_res = requests.get(epmc_url, headers=headers, timeout=6)
+            epmc_res = await run_in_threadpool(requests.get, epmc_url, headers=headers, timeout=6)
             if epmc_res.status_code == 200:
                 epmc_data = epmc_res.json()
                 results = epmc_data.get("resultList", {}).get("result", [])
@@ -2318,7 +2391,7 @@ async def api_doi_lookup(request: Request, doi: str = Form(None), password: str 
     if needs_data():
         try:
             dc_url = f"https://api.datacite.org/dois/{urllib.parse.quote(clean_doi)}"
-            dc_res = requests.get(dc_url, headers=headers, timeout=6)
+            dc_res = await run_in_threadpool(requests.get, dc_url, headers=headers, timeout=6)
             if dc_res.status_code == 200:
                 attrs = dc_res.json().get("data", {}).get("attributes", {})
                 if not paper_data["title"]:
@@ -2360,12 +2433,12 @@ async def api_doi_lookup(request: Request, doi: str = Form(None), password: str 
     if needs_data():
         try:
             pm_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={urllib.parse.quote(clean_doi)}[DOI]&retmode=json"
-            pm_res = requests.get(pm_url, headers=headers, timeout=5)
+            pm_res = await run_in_threadpool(requests.get, pm_url, headers=headers, timeout=5)
             if pm_res.status_code == 200:
                 idlist = pm_res.json().get("esearchresult", {}).get("idlist", [])
                 if idlist:
                     sum_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id={idlist[0]}&retmode=json"
-                    sum_res = requests.get(sum_url, headers=headers, timeout=5)
+                    sum_res = await run_in_threadpool(requests.get, sum_url, headers=headers, timeout=5)
                     if sum_res.status_code == 200:
                         doc = sum_res.json().get("result", {}).get(idlist[0], {})
                         if not paper_data["title"] and doc.get("title"):
@@ -2955,68 +3028,75 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
     candidates_by_key = {}
     title_to_doi_key = {}
 
-    with ThreadPoolExecutor(max_workers=len(search_tasks)) as pool:
-        futures = {pool.submit(fn, clean_t): fn for fn in search_tasks}
+    def _collect_candidates():
+        pool = ThreadPoolExecutor(max_workers=len(search_tasks))
         try:
-            for fut in as_completed(futures, timeout=12):
-                try:
-                    batch = fut.result()
-                    if not isinstance(batch, list):
-                        continue
-                    for item in batch:
-                        c_title = item.get("title", "")
-                        if not c_title:
+            futures = {pool.submit(fn, clean_t): fn for fn in search_tasks}
+            try:
+                for fut in as_completed(futures, timeout=12):
+                    try:
+                        batch = fut.result()
+                        if not isinstance(batch, list):
                             continue
-                        sim = calculate_accurate_title_similarity(clean_t, c_title)
-                        item["similarity"] = sim
+                        for item in batch:
+                            c_title = item.get("title", "")
+                            if not c_title:
+                                continue
+                            sim = calculate_accurate_title_similarity(clean_t, c_title)
+                            item["similarity"] = sim
 
-                        doi = item.get("doi")
-                        norm_t = normalize_title_for_matching(c_title)
+                            doi = item.get("doi")
+                            norm_t = normalize_title_for_matching(c_title)
 
-                        if doi:
-                            key = f"doi:{doi.lower()}"
-                            if norm_t in title_to_doi_key and title_to_doi_key[norm_t] != key:
-                                old_k = title_to_doi_key[norm_t]
-                                if old_k in candidates_by_key and not candidates_by_key[old_k].get("doi"):
-                                    del candidates_by_key[old_k]
-                            title_to_doi_key[norm_t] = key
-                        else:
-                            if norm_t in title_to_doi_key:
-                                key = title_to_doi_key[norm_t]
-                            else:
-                                key = f"title:{norm_t}"
+                            if doi:
+                                key = f"doi:{doi.lower()}"
+                                if norm_t in title_to_doi_key and title_to_doi_key[norm_t] != key:
+                                    old_k = title_to_doi_key[norm_t]
+                                    if old_k in candidates_by_key and not candidates_by_key[old_k].get("doi"):
+                                        del candidates_by_key[old_k]
                                 title_to_doi_key[norm_t] = key
+                            else:
+                                if norm_t in title_to_doi_key:
+                                    key = title_to_doi_key[norm_t]
+                                else:
+                                    key = f"title:{norm_t}"
+                                    title_to_doi_key[norm_t] = key
 
-                        if key not in candidates_by_key:
-                            candidates_by_key[key] = item
-                        else:
-                            existing = candidates_by_key[key]
-                            if sim > existing.get("similarity", 0):
-                                existing["similarity"] = sim
-                                existing["title"] = c_title
-                            if not existing.get("doi") and item.get("doi"):
-                                existing["doi"] = item["doi"]
-                                existing["doi_url"] = item["doi_url"]
-                            if not existing.get("doi_url") and item.get("doi_url"):
-                                existing["doi_url"] = item["doi_url"]
-                            if not existing.get("authors") and item.get("authors"):
-                                existing["authors"] = item["authors"]
-                            if not existing.get("journal") and item.get("journal"):
-                                existing["journal"] = item["journal"]
-                            if (not existing.get("year") or existing.get("year") == "0000") and item.get("year") and item.get("year") != "0000":
-                                existing["year"] = item["year"]
-                            if not existing.get("oa_url") and item.get("oa_url"):
-                                existing["oa_url"] = item["oa_url"]
-                            if not existing.get("volume") and item.get("volume"):
-                                existing["volume"] = item["volume"]
-                            if not existing.get("issue") and item.get("issue"):
-                                existing["issue"] = item["issue"]
-                            if not existing.get("pages") and item.get("pages"):
-                                existing["pages"] = item["pages"]
-                except Exception:
-                    pass
-        except TimeoutError:
-            pass
+                            if key not in candidates_by_key:
+                                candidates_by_key[key] = item
+                            else:
+                                existing = candidates_by_key[key]
+                                if sim > existing.get("similarity", 0):
+                                    existing["similarity"] = sim
+                                    existing["title"] = c_title
+                                if not existing.get("doi") and item.get("doi"):
+                                    existing["doi"] = item["doi"]
+                                    existing["doi_url"] = item["doi_url"]
+                                if not existing.get("doi_url") and item.get("doi_url"):
+                                    existing["doi_url"] = item["doi_url"]
+                                if not existing.get("authors") and item.get("authors"):
+                                    existing["authors"] = item["authors"]
+                                if not existing.get("journal") and item.get("journal"):
+                                    existing["journal"] = item["journal"]
+                                if (not existing.get("year") or existing.get("year") == "0000") and item.get("year") and item.get("year") != "0000":
+                                    existing["year"] = item["year"]
+                                if not existing.get("oa_url") and item.get("oa_url"):
+                                    existing["oa_url"] = item["oa_url"]
+                                if not existing.get("volume") and item.get("volume"):
+                                    existing["volume"] = item["volume"]
+                                if not existing.get("issue") and item.get("issue"):
+                                    existing["issue"] = item["issue"]
+                                if not existing.get("pages") and item.get("pages"):
+                                    existing["pages"] = item["pages"]
+                    except Exception:
+                        pass
+            except TimeoutError:
+                pass
+
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    await run_in_threadpool(_collect_candidates)
 
     candidates = list(candidates_by_key.values())
     for item in candidates:

@@ -30,6 +30,7 @@ jobs:
       - name: Run regression suite
         run: |
           python -m compileall -q app.py access_control.py models.py providers.py network.py citations.py
+          node --check static/js/app.js
           python -m unittest discover -s tests -p 'test_*.py'
       - name: Check required secret and upload application
         env:
@@ -46,7 +47,7 @@ jobs:
           info = api.repo_info(repo_id=repo_id, repo_type="space")
           print("Space:", repo_id, "SHA before:", info.sha)
           paths = [
-              "Dockerfile",
+              "Dockerfile", ".dockerignore",
               "app.py", "access_control.py", "citations.py", "config_loader.py",
               "database.py", "dedup.py", "download_research.py", "identifiers.py",
               "models.py", "network.py", "providers.py", "query_parser.py",

@@ -245,7 +245,11 @@ class TestCitations(unittest.TestCase):
         self.assertEqual(res.text, sample_bib)
 
         # 2. Download with fallback DOI
-        res_doi = client.get("/api/download-bibtex", params={"doi": "10.1000/182"})
+        from unittest.mock import AsyncMock, patch
+        from starlette.responses import JSONResponse
+        fixture = JSONResponse({"ok": True, "paper": {"bibtex": "@misc{test, doi={10.1000/182}}"}})
+        with patch("app.api_doi_lookup", new=AsyncMock(return_value=fixture)):
+            res_doi = client.get("/api/download-bibtex", params={"doi": "10.1000/182"})
         self.assertEqual(res_doi.status_code, 200)
         self.assertIn("10.1000/182", res_doi.text)
         self.assertIn(".bib", res_doi.headers.get("content-disposition", ""))

@@ -40,3 +40,4 @@ fonts/DejaVuSans-Bold.ttf filter=lfs diff=lfs merge=lfs -text
 fonts/DejaVuSans.ttf filter=lfs diff=lfs merge=lfs -text
 downloads/knowledge_ocean.db filter=lfs diff=lfs merge=lfs -text
 templates/hero.webp filter=lfs diff=lfs merge=lfs -text
+static/guides/*.pdf binary

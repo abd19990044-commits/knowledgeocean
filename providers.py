@@ -6,6 +6,7 @@ Supports exact DOI routing, pagination, and circuit breaker resilience.
 """
 
 import re
+import hashlib
 import logging
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
@@ -767,13 +768,14 @@ def fetch_openlibrary_batch(keywords: str, state: dict, mode: str, affiliation: 
     return papers
 
 
-def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str, task_id: str, is_guest: bool, batch_size: int) -> List[CanonicalPaper]:
+def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str, task_id: str, is_guest: bool, batch_size: int, *, api_key: Optional[str] = None) -> List[CanonicalPaper]:
     if is_task_cancelled(task_id):
         return []
     if is_guest:
         state['exhausted'] = True
         return []
-    api_key = os.environ.get("ELSEVIER_API_KEY", "").strip() or ELSEVIER_API_KEY
+    personal_key = (api_key or "").strip()
+    api_key = personal_key or os.environ.get("ELSEVIER_API_KEY", "").strip() or ELSEVIER_API_KEY
     if not api_key:
         state['exhausted'] = True
         return []
@@ -786,6 +788,7 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
     try:
         res = safe_get('elsevier', "https://api.elsevier.com/content/search/scopus", task_id, is_guest,
                        headers={"X-ELS-APIKey": api_key, "Accept": "application/json"},
+                       circuit_key="elsevier:" + hashlib.sha256(api_key.encode()).hexdigest() if personal_key else "elsevier",
                        params={"query": query, "count": req_count, "start": state.get('offset', 0)}, timeout=15)
         if res and res.status_code == 200:
             entries = [e for e in res.json().get("search-results", {}).get("entry", []) if 'error' not in e]

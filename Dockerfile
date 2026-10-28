@@ -23,10 +23,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+RUN useradd --create-home --uid 1000 appuser
+COPY --chown=1000:1000 . .
 
 # مجلدات قابلة للكتابة (HF Spaces قد يشغّل بمستخدم غير root)
-RUN mkdir -p /app/downloads /app/fonts && chmod -R 777 /app/downloads /app/fonts
+RUN mkdir -p /app/downloads /app/fonts && chown 1000:1000 /app/downloads /app/fonts
+USER appuser
 
 EXPOSE 7860
 
