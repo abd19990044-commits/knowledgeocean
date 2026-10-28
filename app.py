@@ -96,7 +96,7 @@ if not RAW_PASSWORDS:
     APP_PASSWORDS = set()
     log.warning("APP_PASSWORD not configured: VIP access and Scopus searches are disabled until a secret is set.")
 else:
-    APP_PASSWORDS = {p.strip() for p in RAW_PASSWORDS.split(",") if p.strip()}
+    APP_PASSWORDS = {p for p in re.split(r"[,،;؛\r\n]+", RAW_PASSWORDS) if (p := p.strip())}
 
 # Secondary auto-renewing password (other_password) allowing 250 daily quota in standard queue
 DEFAULT_OTHER_PASSWORDS = set()  # Legacy constant: no built-in secondary access codes
@@ -104,7 +104,7 @@ RAW_OTHER_PASSWORDS = os.environ.get("OTHER_PASSWORD", "").strip() or os.environ
 if not RAW_OTHER_PASSWORDS:
     OTHER_PASSWORDS = set()
 else:
-    OTHER_PASSWORDS = {p.strip() for p in RAW_OTHER_PASSWORDS.split(",") if p.strip()}
+    OTHER_PASSWORDS = {p for p in re.split(r"[,،;؛\r\n]+", RAW_OTHER_PASSWORDS) if (p := p.strip())}
 
 def verify_password(pwd: str) -> bool:
     """Safe constant-time password verification strictly prioritizing secrets over default 123."""
@@ -112,7 +112,7 @@ def verify_password(pwd: str) -> bool:
         return False
     raw_passwords = os.environ.get("APP_PASSWORD", "").strip()
     if raw_passwords:
-        passwords = {p.strip() for p in raw_passwords.split(",") if p.strip()}
+        passwords = {p for p in re.split(r"[,،;؛\r\n]+", raw_passwords) if (p := p.strip())}
     else:
         passwords = set()
     clean_pwd = pwd.strip().encode('utf-8')
@@ -1162,10 +1162,18 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                 return True
 
         round_no = 0
+        search_started = time.monotonic()
+        search_max_seconds = max(30, min(150, int(os.environ.get("SEARCH_MAX_SECONDS", "90"))))
+        max_search_rounds = max(2, min(8, int(os.environ.get("SEARCH_MAX_ROUNDS", "4"))))
+        rounds_without_new_papers = 0
         with open(txt_path, "w", encoding="utf-8") as txt_file:
             txt_file.write(f"Knowledge Ocean Exploration Log\nTopic: {query}\nDate: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n" + "="*70 + "\n\n")
 
             while len(paper_index) < target_limit:
+                if round_no >= max_search_rounds or time.monotonic() - search_started >= search_max_seconds:
+                    log.warning("Search budget reached for task %s: %s rounds, %s papers", task_id, round_no, len(paper_index))
+                    break
+                before_count = len(paper_index)
                 round_no += 1
                 if task_id in CANCELLED_TASKS:
                     log.info(f"Task {task_id} cancellation detected in loop. Stopping search with {len(paper_index)} papers.")
@@ -1178,14 +1186,17 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                     if not active_this_round:
                         break
 
-                executor = ThreadPoolExecutor(max_workers=len(active_this_round))
+                remaining_seconds = search_max_seconds - (time.monotonic() - search_started)
+                if remaining_seconds <= 0:
+                    break
+                executor = ThreadPoolExecutor(max_workers=min(6, len(active_this_round)))
                 futures = {
                     executor.submit(FETCH_BATCH_MAP[name], query, engine_states[name], mode, affiliation, task_id, is_guest, batch_size): name
                     for name in active_this_round
                 }
 
                 try:
-                    for fut in as_completed(futures, timeout=12 if target_limit <= 10 else 25):
+                    for fut in as_completed(futures, timeout=min(12 if target_limit <= 10 else 22, max(1, remaining_seconds))):
                         if task_id in CANCELLED_TASKS:
                             log.info(f"Task {task_id} cancellation detected in futures. Breaking out.")
                             break
@@ -1250,6 +1261,13 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                     break
 
                 if len(paper_index) >= target_limit:
+                    break
+                if len(paper_index) <= before_count:
+                    rounds_without_new_papers += 1
+                else:
+                    rounds_without_new_papers = 0
+                if rounds_without_new_papers >= 2:
+                    log.warning("Stopping task %s: two search rounds without new papers", task_id)
                     break
 
                 pct = min(75, 15 + int((len(paper_index) / target_limit) * 60)) if not unlimited else min(75, 15 + round_no * 10)
