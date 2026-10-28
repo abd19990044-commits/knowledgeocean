@@ -1620,7 +1620,7 @@ async def api_active_task(request: Request, password: str = "", guest_token: str
     return find_active_task_for_key("", owner or "local_user", "")
 
 @app.get("/api/guest-quota")
-async def api_guest_quota(request: Request, password: str = "", guest_token: str = ""):
+async def api_guest_quota(request: Request, response: Response, password: str = "", guest_token: str = ""):
     """
     Returns live remaining search quota:
     - VIP: Unlimited
@@ -1644,6 +1644,8 @@ async def api_guest_quota(request: Request, password: str = "", guest_token: str
     uh = hashlib.sha256(f"guest_{clean_gt}_{browser_fp}".encode()).hexdigest()[:16] if clean_gt else hashlib.sha256(f"{ip}_{browser_fp}".encode()).hexdigest()[:16]
     owner = session_owner(request)
     active_task = find_active_task_for_key("", owner or "local_user", "") if (owner or is_local_instance(request)) else {"has_active_task": False}
+    if not owner and clean_gt and not is_local_instance(request):
+        issue_session(response, uh, secure=request.url.scheme == "https")
 
     session_uh = session_owner(request)
     is_vip = verify_password(password) or bool(session_uh and any(hmac.compare_digest(session_uh, user_hash_for(p)) for p in APP_PASSWORDS))
