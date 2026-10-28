@@ -15,7 +15,7 @@ from models import CanonicalPaper, is_preprint_record
 from identifiers import normalize_doi, extract_doi, is_doi_query
 from network import (
     CANCELLED_TASKS,
-    safe_get, UNPAYWALL_EMAIL, SEMANTIC_SCHOLAR_API_KEY,
+    safe_get, get_engine_circuit_status, UNPAYWALL_EMAIL, SEMANTIC_SCHOLAR_API_KEY,
     GOOGLE_API_KEY, ELSEVIER_API_KEY, CORE_API_KEY
 )
 
@@ -771,11 +771,13 @@ def fetch_openlibrary_batch(keywords: str, state: dict, mode: str, affiliation: 
 def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str, task_id: str, is_guest: bool, batch_size: int, *, api_key: Optional[str] = None) -> List[CanonicalPaper]:
     if is_task_cancelled(task_id):
         return []
-    if is_guest:
+    personal_key = (api_key or "").strip()
+    if is_guest and not personal_key:
         state['exhausted'] = True
         return []
-    personal_key = (api_key or "").strip()
-    api_key = personal_key or os.environ.get("ELSEVIER_API_KEY", "").strip() or ELSEVIER_API_KEY
+    api_key = personal_key
+    if not api_key and not is_guest:
+        api_key = os.environ.get("ELSEVIER_API_KEY", "").strip() or ELSEVIER_API_KEY
     if not api_key:
         state['exhausted'] = True
         return []
@@ -784,14 +786,42 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
     query = f'AUTH("{clean_k.replace(chr(34), "")}")' if mode == "author" else f'TITLE-ABS-KEY({clean_k})'
     if mode == "author" and affiliation:
         query += f' AND AFFIL("{affiliation}")'
-    req_count = min(25, batch_size)
+    circuit_key = "elsevier:" + hashlib.sha256(api_key.encode()).hexdigest()
+    def stop_with_notice(status):
+        notices = {
+            "access_denied": "Scopus: المفتاح لا يمنح صلاحية البحث المطلوبة؛ تحقق من تفعيل Scopus في حساب Elsevier. / This key lacks Scopus search access; check its Elsevier entitlements.",
+            "quota_exceeded": "Scopus: نفدت حصة مفتاح Elsevier؛ تتوقف الطلبات حتى موعد التجديد. / The key's quota is exhausted; requests pause until reset.",
+            "rate_limited": "Scopus: تم بلوغ حد الطلبات؛ أُوقفت المحاولات مؤقتاً وفق حدود المزود. / Request rate limit reached; calls are paused according to provider limits.",
+            "unavailable": "Scopus: تعذر الاتصال بالمزود حالياً؛ حاول لاحقاً. / Provider temporarily unavailable; try later.",
+        }
+        state.update(exhausted=True, provider_status=status, warning=notices[status])
+        return []
+    cooldown = get_engine_circuit_status(circuit_key)
+    if cooldown:
+        reason = cooldown.get("reason", "")
+        return stop_with_notice("quota_exceeded" if "quota" in reason.lower() else "access_denied" if "401" in reason or "403" in reason else "rate_limited" if "429" in reason else "unavailable")
+    start = max(0, int(state.get('offset', 0)))
+    req_count = min(25, max(1, int(batch_size)), 5000 - start)
+    if req_count <= 0:
+        state['exhausted'] = True
+        return []
     try:
         res = safe_get('elsevier', "https://api.elsevier.com/content/search/scopus", task_id, is_guest,
                        headers={"X-ELS-APIKey": api_key, "Accept": "application/json"},
-                       circuit_key="elsevier:" + hashlib.sha256(api_key.encode()).hexdigest() if personal_key else "elsevier",
-                       params={"query": query, "count": req_count, "start": state.get('offset', 0)}, timeout=15)
-        if res and res.status_code == 200:
-            entries = [e for e in res.json().get("search-results", {}).get("entry", []) if 'error' not in e]
+                       circuit_key=circuit_key, quota_aware=True,
+                       params={"query": query, "view": "STANDARD", "count": req_count, "start": start}, timeout=15)
+        if res is None:
+            return stop_with_notice("unavailable")
+        if res.status_code in (401, 403):
+            return stop_with_notice("access_denied")
+        if res.status_code == 429:
+            return stop_with_notice("quota_exceeded" if "QUOTA_EXCEEDED" in str(res.headers.get("X-ELS-Status", "")).upper() else "rate_limited")
+        if res.status_code == 200:
+            result = res.json().get("search-results", {})
+            raw_entries = result.get("entry") or []
+            if isinstance(raw_entries, dict):
+                raw_entries = [raw_entries]
+            entries = [e for e in raw_entries if isinstance(e, dict) and 'error' not in e]
             for e in entries:
                 cover = e.get("prism:coverDate", "")
                 year = cover.split("-")[0] if cover else "0000"
@@ -800,20 +830,23 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
                     title=e.get("dc:title", "No Title"),
                     abstract=e.get("dc:description", ""),
                     year=year,
-                    authors=[a.strip() for a in str(e.get("dc:creator", "")).split(',') if a.strip()],
+                    authors=[str(e["dc:creator"]).strip()] if e.get("dc:creator") else [],
                     journal=e.get("prism:publicationName", ""),
-                    publisher="Elsevier",
+                    publisher=e.get("dc:publisher", ""),
                     sources=["elsevier"],
                     field_provenance={"doi": "elsevier", "title": "elsevier", "abstract": "elsevier"}
                 ))
-            state['offset'] = state.get('offset', 0) + len(entries)
-            if len(entries) < req_count:
+            state['offset'] = start + len(raw_entries)
+            total = str(result.get('opensearch:totalResults', ''))
+            if len(raw_entries) < req_count or not entries or state['offset'] >= 5000 or (total.isdigit() and state['offset'] >= int(total)):
                 state['exhausted'] = True
+            if str(res.headers.get("X-RateLimit-Remaining", "")).strip() == "0":
+                stop_with_notice("quota_exceeded")
         else:
-            state['exhausted'] = True
+            return stop_with_notice("unavailable")
     except Exception as e:
         log.warning(f"Scopus batch error: {e}")
-        state['exhausted'] = True
+        return stop_with_notice("unavailable")
     return papers
 
 

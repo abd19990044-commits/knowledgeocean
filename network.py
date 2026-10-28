@@ -8,6 +8,7 @@ import os
 import time
 import logging
 import threading
+from email.utils import parsedate_to_datetime
 from typing import Dict, Optional
 import requests
 from requests.adapters import HTTPAdapter
@@ -44,6 +45,8 @@ try:
     _adapter = HTTPAdapter(pool_connections=64, pool_maxsize=64, max_retries=retry_strategy)
     HTTP.mount("https://", _adapter)
     HTTP.mount("http://", _adapter)
+    # Personal/free Scopus keys must not incur hidden transport-level retries.
+    HTTP.mount("https://api.elsevier.com/", HTTPAdapter(pool_connections=16, pool_maxsize=16, max_retries=0))
 except Exception:
     pass
 
@@ -125,12 +128,40 @@ def _task_stopped(task_id: Optional[str]) -> bool:
         deadline = task.get("_search_deadline")
         return task.get("status") in ("completed", "error") or bool(deadline and time.monotonic() >= deadline)
 
+
+def _header_wait(value: str) -> float:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        try:
+            seconds = parsedate_to_datetime(value).timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError, AttributeError):
+            return 0.0
+    return max(0.0, min(7 * 86400.0, seconds))
+
+
+def _scopus_quota_cooldown(response, circuit_key: str) -> bool:
+    """Honor the actual key's allowance; no assumed universal free quota."""
+    headers = response.headers
+    exhausted = str(headers.get("X-RateLimit-Remaining", "")).strip() == "0" or "QUOTA_EXCEEDED" in str(headers.get("X-ELS-Status", "")).upper()
+    if not exhausted and response.status_code != 429:
+        return False
+    cooldown = max(60.0, _header_wait(headers.get("Retry-After", "")))
+    if exhausted:
+        try:
+            cooldown = max(cooldown, min(7 * 86400.0, float(headers.get("X-RateLimit-Reset", "")) - time.time()))
+        except (TypeError, ValueError, OverflowError):
+            pass
+    trip_engine_circuit(circuit_key, cooldown_seconds=cooldown, reason="Scopus quota exhausted" if exhausted else "HTTP 429 Too Many Requests")
+    return True
+
 def safe_get(engine_name: str, url: str, task_id: Optional[str] = None, is_guest: bool = False, **kwargs) -> Optional[requests.Response]:
     """
     Executes a safe GET request respecting per-provider locks, delays,
     granular circuit breaker cooldowns (429, 401/403, 5xx, timeout), and instant task cancellations.
     """
     circuit_key = kwargs.pop("circuit_key", engine_name)
+    quota_aware = kwargs.pop("quota_aware", False)
     if _task_stopped(task_id):
         return None
 
@@ -167,7 +198,9 @@ def safe_get(engine_name: str, url: str, task_id: Optional[str] = None, is_guest
         res = HTTP.get(url, **kwargs)
         if task_id and task_id in CANCELLED_TASKS:
             return None
-        if res.status_code == 429:
+        if quota_aware and _scopus_quota_cooldown(res, circuit_key):
+            pass
+        elif res.status_code == 429:
             retry_after = res.headers.get("Retry-After")
             cooldown = 60.0
             if retry_after and retry_after.isdigit():

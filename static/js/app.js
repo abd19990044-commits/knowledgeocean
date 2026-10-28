@@ -140,7 +140,7 @@
 
       // DOI Title Tab
       titleInputLabel: "Enter full paper title to extract DOI and metadata",
-      titleInputPlaceholder: "e.g. Determination of ibuprofen and naproxen in tablets with serious dye interferences...",
+      titleInputPlaceholder: "e.g. Climate change impacts on biodiversity and ecosystems...",
       titleFindBtn: "Extract DOI 🔍",
       titleFindLoading: "Searching academic databases...",
       titleMatchHeader: "Verified matching papers found:",
@@ -178,7 +178,7 @@
 
       // Advanced Filters
       strictTitleLabel: "Strict Title Filter (Title Must Filter)",
-      strictTitlePrecisionBadge: "99% Precision",
+      strictTitlePrecisionBadge: "Title Matching",
       strictTitleDesc: "Choose whether search keywords must appear strictly in the paper title, or across both title and abstract.",
       strictTitleOnBadge: "ON - Strict Title Matching",
       strictTitleOnText: "Strictly excludes any paper whose title does not contain your keywords. Ensures 99% topic precision by scanning deep database batches until your requested paper count is met or repositories are exhausted. (Recommended for exact topics or specific queries).",
@@ -202,7 +202,7 @@
       sourceAll: "All Engines (12 Open Science Engines)",
       sourcePubmed: "PubMed (Biomedical & Life Sciences)",
       sourceElsevierLocal: "Scopus (Elsevier)",
-      sourceElsevierCloud: "Scopus (Elsevier) [Requires VIP Key]",
+      sourceElsevierCloud: "Scopus (Elsevier) [Personal API key or VIP]",
       sourceEuropepmc: "Europe PMC",
       sourceOpenalex: "OpenAlex (Global Scientific Graph)",
       sourceCrossref: "Crossref (Official DOIs)",
@@ -308,7 +308,7 @@
 
       // Alerts & Messages
       alertEnterQuery: "Please enter a search keyword or topic",
-      alertElsevierGuest: "Scopus (Elsevier) is unavailable for guests and requires VIP access or local edition.",
+      alertElsevierGuest: "Save your personal Elsevier API key in Sign In to use Scopus with your current account tier.",
       alertSendingRequest: "Sending request to academic search engines...",
       alertSearchStarted: "Multi-threaded academic discovery and indexing started...",
       alertServerOffline: "Unable to connect to server — please verify backend is running",
@@ -375,7 +375,7 @@
 
       // DOI Title Tab
       titleInputLabel: "أدخل العنوان الكامل للبحث العلمي لاستخراج المعرف وتوثيقه",
-      titleInputPlaceholder: "مثال: Determination of ibuprofen and naproxen in tablets...",
+      titleInputPlaceholder: "مثال: Digital learning and student engagement in higher education...",
       titleFindBtn: "استخراج المعرف 🔍",
       titleFindLoading: "جاري البحث في القواعد الأكاديمية...",
       titleMatchHeader: "أبحاث مطابقة ومؤكدة تم العثور عليها:",
@@ -413,7 +413,7 @@
 
       // Advanced Filters
       strictTitleLabel: "فلتر العنوان الإلزامي (Title Must Filter)",
-      strictTitlePrecisionBadge: "دقة استهداف 99%",
+      strictTitlePrecisionBadge: "مطابقة العنوان",
       strictTitleDesc: "تحديد نطاق مطابقة الكلمات: هل يُشترط وجودها في عنوان البحث نفسه، أم يُكتفى بوجودها في العنوان أو الملخص.",
       strictTitleOnBadge: "مُفعّل (ON) - حصر إلزامي في العنوان",
       strictTitleOnText: "يستبعد أي دراسة لا تتضمن كلمات البحث صراحةً في عنوانها (Title)، مما يضمن أعلى دقة وتطابقاً بنسبة 99%. يواصل المحرك المسح التكراري لقواعد البيانات حتى استيفاء العدد المطلوب كاملاً أو نفاد النتائج المتاحة. (موصى به عند البحث عن موضوع دقيق ومحدد).",
@@ -437,7 +437,7 @@
       sourceAll: "شامل لايجاد كل ما هو موجود (12 محركاً)",
       sourcePubmed: "PubMed (طبية وحيوية)",
       sourceElsevierLocal: "Scopus (Elsevier)",
-      sourceElsevierCloud: "Scopus (Elsevier) [يتطلب مفتاح VIP]",
+      sourceElsevierCloud: "Scopus (Elsevier) [مفتاحك الشخصي أو VIP]",
       sourceEuropepmc: "Europe PMC",
       sourceOpenalex: "OpenAlex",
       sourceCrossref: "CrossRef",
@@ -543,7 +543,7 @@
 
       // Alerts & Messages
       alertEnterQuery: "يرجى إدخال كلمة أو مصطلح البحث",
-      alertElsevierGuest: "قاعدة Scopus (Elsevier) غير متاحة للضيوف وتتطلب إدخال مفتاح الوصول (VIP) أو استخدام النسخة المحلية.",
+      alertElsevierGuest: "احفظ مفتاح Elsevier الشخصي من نافذة الدخول لاستخدام Scopus دون تغيير فئة حسابك.",
       alertSendingRequest: "جاري إرسال الطلب لمحركات البحث الأكاديمية...",
       alertSearchStarted: "بدأت عملية المسح والتجميع والتدقيق المتوازي...",
       alertServerOffline: "تعذر الاتصال بالخادم — تأكد من تشغيل السيرفر",
@@ -1400,6 +1400,9 @@
           setStatusMsg(localizeTaskMessage(data.message || data.msg, lang));
 
           if (data.status === "completed") {
+            if (Array.isArray(data.provider_warnings) && data.provider_warnings.length) {
+              showAlert(data.provider_warnings.join("\n"), "info", 0);
+            }
             if (pollingRef.current) clearInterval(pollingRef.current);
             setIsSearching(false);
             setShowDownloadPanel(true);
@@ -1507,8 +1510,8 @@
         return;
       }
 
-      if (!quota.isVip && dbSource === "elsevier") {
-        showAlert(lang === "ar" ? "قاعدة Scopus (Elsevier) غير متاحة للضيوف وتتطلب إدخال مفتاح الوصول (VIP) أو استخدام النسخة المحلية." : "Scopus (Elsevier) is unavailable for guests. VIP key or Local edition required.", "error");
+      if (!quota.isVip && !elsevierApiKey && dbSource === "elsevier") {
+        showAlert(t.alertElsevierGuest, "error");
         return;
       }
 
@@ -1521,7 +1524,7 @@
 
       const form = new FormData();
       form.append("password", password.trim());
-      if (quota.isVip && elsevierApiKey) form.append("elsevier_api_key", elsevierApiKey);
+      if (elsevierApiKey) form.append("elsevier_api_key", elsevierApiKey);
       form.append("guest_token", getOrCreateGuestToken());
       form.append("query", query.trim());
       form.append("mode", mode);
@@ -1668,9 +1671,12 @@
     // Example search terms chips
     const exampleQueries = [
       "Artificial Intelligence in Healthcare",
-      "CRISPR Cas9 Gene Editing",
-      "Quantum Computing Algorithms",
-      "Renewable Energy Perovskite Solar Cells"
+      "Climate Change AND Biodiversity",
+      "Renewable Energy AND Energy Storage",
+      "Digital Learning AND Student Engagement",
+      "Inflation AND Economic Growth",
+      "Cultural Heritage AND Digital Archives",
+      "Graph Theory AND Network Optimization"
     ];
 
     return html`
@@ -1733,7 +1739,7 @@
                 `}
               </div>
 
-              <!-- Dedicated Sign In / VIP & Secondary Code Button -->
+              <!-- Dedicated Sign In / Access Code & VIP Button -->
               <button
                 id="login-btn"
                 type="button"
@@ -1750,14 +1756,14 @@
                     ? "bg-teal-500/15 dark:bg-teal-500/25 border-teal-500/40 text-teal-700 dark:text-teal-300 hover:bg-teal-500/30"
                     : "bg-blue-500/10 dark:bg-blue-500/20 border-blue-500/30 text-blue-700 dark:text-blue-300 hover:bg-blue-500/20"
                 }`}
-                title=${lang === "ar" ? "تسجيل الدخول بالرمز الثانوي أو مفتاح VIP الأكاديمي" : "Sign in with VIP or Secondary Code"}
+                title=${lang === "ar" ? "تسجيل الدخول برمز الوصول أو مفتاح VIP الأكاديمي" : "Sign in with Access Code or VIP"}
               >
                 <span className="text-[13px] sm:text-[14px]">${quota.isVip ? "✨" : (quota.autoRenew || quota.isOther) ? "🔄" : "🔑"}</span>
                 <span className="hidden sm:inline">
                   ${quota.isVip
                     ? (lang === "ar" ? "حساب VIP" : "VIP Tier")
                     : (quota.autoRenew || quota.isOther)
-                    ? (lang === "ar" ? "رمز ثانوي (250)" : "Secondary (250)")
+                    ? (lang === "ar" ? "رمز الوصول (250)" : "Access Code (250)")
                     : (lang === "ar" ? "تسجيل الدخول" : "Sign In")}
                 </span>
                 <span className="sm:hidden text-[10px]">
@@ -1858,7 +1864,7 @@
                 <option value="ar">العربية (RTL)</option>
                 <option value="en">English</option>
               </select>
-              <a id="download-user-guide" href=${`/api/user-guide/${guideLanguage}`} download=${`KnowledgeOcean_User_Guide_${guideLanguage.toUpperCase()}.pdf`} className="inline-flex items-center h-10 rounded-[12px] bg-teal-700 hover:bg-teal-800 px-4 text-white text-xs font-bold transition">
+              <a id="download-user-guide" href=${`/api/user-guide/${guideLanguage}?v=20261029-2`} download=${`KnowledgeOcean_User_Guide_${guideLanguage.toUpperCase()}.pdf`} className="inline-flex items-center h-10 rounded-[12px] bg-teal-700 hover:bg-teal-800 px-4 text-white text-xs font-bold transition">
                 ${lang === "ar" ? "تنزيل دليل الاستخدام (PDF)" : "Download User Guide (PDF)"}
               </a>
             </div>
@@ -3565,12 +3571,12 @@
                 <div className="rounded-[18px] border border-stone-200/80 dark:border-white/10 bg-stone-50/70 dark:bg-white/[0.03] p-4 sm:p-5 space-y-2">
                   <div className="font-black text-[13.5px] text-amber-700 dark:text-amber-400 flex items-center gap-2">
                     <span className="text-base">🎯</span>
-                    <span>${lang === "ar" ? "2. فلتر العنوان الإلزامي ودقة الاستهداف 99%" : "2. Strict Title Filter (99% Precision)"}</span>
+                    <span>${lang === "ar" ? "2. فلتر العنوان الإلزامي وضبط نطاق المطابقة" : "2. Strict Title Filter (Title Matching)"}</span>
                   </div>
                   <p className="opacity-85 text-stone-700 dark:text-stone-300 whitespace-pre-line">
                     ${lang === "ar"
-                      ? "• مُفعّل (ON): يُلزم محرك البحث بوجود كلماتك صراحةً في عنوان الورقة العلمية (Title)، ويستبعد أي دراسة ذُكرت كلماتها في الملخص فقط. يضمن دقة استهداف تصل إلى 99% للموضوعات المتخصصة مع مسح دفعات تكرارية من قواعد البيانات حتى استيفاء العدد المطلوب.\n• غير مُفعّل (OFF - الافتراضي): بحث استكشافي شامل يبحث في العناوين والملخصات معاً لضمان عدم تفويت أي دراسة قيّمة ذات صلة، مع ترتيب الأوراق المتطابقة في العنوان أولاً."
-                      : "• ON: Excludes any paper whose title lacks the exact keywords for 99% precision, continuously fetching batches from engines until your target count is met.\n• OFF (Default): Comprehensive discovery across both titles and abstracts, automatically prioritizing title matches at the top of results."
+                      ? "• مُفعّل (ON): يُلزم محرك البحث بوجود كلماتك صراحةً في عنوان الورقة العلمية (Title)، ويستبعد أي دراسة ذُكرت كلماتها في الملخص فقط. يضيق نطاق الاسترجاع، وقد يقل عدد النتائج تبعاً للمصادر والمرشحات والمهلة المتاحة.\n• غير مُفعّل (OFF - الافتراضي): بحث استكشافي شامل يبحث في العناوين والملخصات معاً لضمان عدم تفويت أي دراسة قيّمة ذات صلة، مع ترتيب الأوراق المتطابقة في العنوان أولاً."
+                      : "• ON: Excludes any paper whose title lacks the exact keywords under strict matching; the returned count depends on source coverage, filters, and the available time budget.\n• OFF (Default): Comprehensive discovery across both titles and abstracts, automatically prioritizing title matches at the top of results."
                     }
                   </p>
                 </div>
@@ -3583,8 +3589,8 @@
                   </div>
                   <p className="opacity-85 text-stone-700 dark:text-stone-300 whitespace-pre-line">
                     ${lang === "ar"
-                      ? "• بحث قياسي (زر الملخصات معطل): يستهلك نقطة واحدة لكل بحث لجلب العناوين والمؤلفين والمجلات وروابط المعرفات والوصول المفتوح فورياً.\n• تفعيل زر الملخصات: يستهلك نقطتين لكل بحث لجلب الملخص الكامل (Abstract) وتضمينه في النتائج وتقرير الـ PDF.\n• الحصص: 50 بحثاً مجانياً للزوار، 250 بحثاً يومياً لحاملي الرمز الثانوي تتجدد تلقائياً كل 24 ساعة، ووصول غير محدود كلياً لأصحاب رموز VIP."
-                      : "• Standard Search (Toggle OFF): 1 credit per search for swift metadata, author lists, and DOI links.\n• Include Abstracts (Toggle ON): 2 credits per search (2x rate) to extract complete abstracts into results and PDF dossiers.\n• Quotas: 50 free credits for guests, 250 daily renewing searches for secondary key holders, and unlimited VIP access."
+                      ? "• بحث قياسي (زر الملخصات معطل): يستهلك نقطة واحدة لكل بحث لجلب العناوين والمؤلفين والمجلات وروابط المعرفات والوصول المفتوح فورياً.\n• تفعيل زر الملخصات: يستهلك نقطتين لكل بحث لجلب الملخص الكامل (Abstract) وتضمينه في النتائج وتقرير الـ PDF.\n• الحصص: 50 رصيداً يومياً للضيوف و250 رصيداً لصاحب رمز الوصول؛ وتُعتمد الحصة المعروضة أعلى الصفحة."
+                      : "• Standard Search (Toggle OFF): 1 credit per search for swift metadata, author lists, and DOI links.\n• Include Abstracts (Toggle ON): 2 credits per search (2x rate) to extract complete abstracts into results and PDF dossiers.\n• Quotas: 50 daily credits for guests and 250 for Access Code holders; the current allowance appears in the page header."
                     }
                   </p>
                 </div>
@@ -4112,7 +4118,7 @@
           </div>
         ` : null}
 
-        <!-- Login / VIP & Secondary Code Modal -->
+        <!-- Login / Access Code & VIP Modal -->
         ${showLoginModal ? html`
           <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4 animate-fade-in backdrop-blur-sm">
             <div className=${`w-full max-w-[520px] max-h-[92vh] flex flex-col rounded-[26px] border shadow-2xl overflow-hidden glass-panel ${
@@ -4126,7 +4132,7 @@
                   </div>
                   <div>
                     <h3 className="text-[17px] font-black leading-tight">
-                      ${lang === "ar" ? "تسجيل الدخول / الرمز الثانوي و VIP" : "Sign In / VIP & Secondary Code"}
+                      ${lang === "ar" ? "تسجيل الدخول / رمز الوصول و VIP" : "Sign In / Access Code & VIP"}
                     </h3>
                     <p className="text-[11px] opacity-75 font-medium mt-0.5">
                       ${lang === "ar" ? "تفعيل حصة 250 بحثاً يومياً أو الوصول الشامل غير المحدود" : "Activate 250 daily searches or unlimited access"}
@@ -4155,7 +4161,7 @@
                       <div className="font-black text-sm">
                         ${quota.isVip
                           ? (lang === "ar" ? "حساب VIP نشط (استخراج غير محدود)" : "Active VIP Tier (Unlimited Access)")
-                          : (lang === "ar" ? "الرمز الثانوي نشط (250 بحث يومياً)" : "Active Secondary Tier (250 Daily Searches)")}
+                          : (lang === "ar" ? "رمز الوصول نشط (250 بحث يومياً)" : "Active Access Code Tier (250 Daily Searches)")}
                       </div>
                       <p className="text-xs opacity-85 mt-1 leading-relaxed">
                         ${quota.isVip
@@ -4188,7 +4194,7 @@
                   <div className="p-3 rounded-[14px] border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-black/30">
                     <div className="font-bold flex items-center gap-1.5 text-teal-600 dark:text-teal-400">
                       <span>🔄</span>
-                      <span>${lang === "ar" ? "الرمز الثانوي المتجدد" : "Renewable Secondary Key"}</span>
+                      <span>${lang === "ar" ? "رمز الوصول المتجدد" : "Renewable Access Code"}</span>
                     </div>
                     <div className="opacity-75 text-[11px] mt-1">
                       ${lang === "ar" ? "حصة يومية 250 بحثاً تتجدد 12:00 ص بتوقيت بغداد." : "250 searches daily renewing 12:00 AM Baghdad time."}
@@ -4249,7 +4255,7 @@
                       value=${loginInputCode}
                       onInput=${(e) => setLoginInputCode(e.target.value)}
                       onKeyDown=${(e) => { if (e.key === "Enter") handleLogin(); }}
-                      placeholder=${lang === "ar" ? "رمز VIP أو الرمز الثانوي..." : "VIP or secondary key..."}
+                      placeholder=${lang === "ar" ? "رمز VIP أو رمز الوصول..." : "VIP or access code..."}
                       className="w-full h-[46px] px-4 pr-11 pl-4 rounded-[14px] border border-stone-300 dark:border-white/20 bg-stone-50 dark:bg-black/40 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 text-stone-900 dark:text-white disabled:opacity-50"
                     />
                     <button
@@ -4280,7 +4286,7 @@
                     className="w-full h-[46px] px-4 rounded-[14px] border border-stone-300 dark:border-white/20 bg-stone-50 dark:bg-black/40 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 text-stone-900 dark:text-white"
                   />
                   <p className="text-[11px] opacity-75 leading-relaxed">
-                    ${lang === "ar" ? "يُحفظ في هذا المتصفح ويُستخدم بدل مفتاح المنصة في بحث Scopus لحساب VIP. يُرسل عبر الخادم إلى Elsevier وقت البحث ولا يُحفظ في سجلات البحث. يمكنك حذفه من هنا." : "Saved in this browser and used instead of the platform key for VIP Scopus searches. Sent through the server to Elsevier during search, without saving it in search records. You can remove it here."}
+                    ${lang === "ar" ? "متاح للضيف ولصاحب رمز الوصول وللحساب المسجل. يُحفظ في هذا المتصفح ويُرسل إلى Elsevier وقت البحث دون حفظه في سجلات المهام. تُستخدم بيانات STANDARD الأساسية، بحد أقصى 25 سجلاً للطلب، وفق صلاحيات المفتاح وحصته. لا تُطلب خدمات مدفوعة أو ملخصات تتطلب اشتراكاً." : "Available to guests, Access Code holders, and signed-in users. Saved in this browser and sent to Elsevier during search without being stored in task records. Uses basic STANDARD metadata, at most 25 records per call, within the key's entitlements and quota. No paid services or subscription-only abstracts are requested."}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button type="button" id="save-elsevier-key" onClick=${saveElsevierKey} className="px-3 py-2 rounded-[10px] bg-blue-600 text-white text-xs font-bold cursor-pointer">

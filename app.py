@@ -95,7 +95,7 @@ logging.getLogger("requests").setLevel(logging.ERROR)
 RAW_PASSWORDS = os.environ.get("APP_PASSWORD", "").strip()
 if not RAW_PASSWORDS:
     APP_PASSWORDS = set()
-    log.warning("APP_PASSWORD not configured: VIP access and Scopus searches are disabled until a secret is set.")
+    log.warning("APP_PASSWORD not configured: VIP access is disabled; users can still supply personal Elsevier keys.")
 else:
     APP_PASSWORDS = {part.strip() for part in re.split(r"[,،;؛\r\n]+", RAW_PASSWORDS) if part.strip()}
 
@@ -1087,7 +1087,7 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
 def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliation="", uh="default", task_id="", require_title=False, year_from=None, year_to=None, include_preprint=True, is_guest=False, include_abstracts=False, download_fulltext=False, guest_ip="", guest_fp="", is_other=False, search_scope="all", doc_type_filter="all", **kwargs):
     guest_token = kwargs.get("guest_token", "")
     # Request-scoped credentials stay in memory, never in task data or SQLite.
-    personal_elsevier_key = (kwargs.get("elsevier_api_key") or "").strip() if not is_guest else ""
+    personal_elsevier_key = (kwargs.get("elsevier_api_key") or "").strip()
     with_abstracts = bool(include_abstracts or download_fulltext or kwargs.get("with_abstracts", False))
     if query:
         query = normalize_boolean_query(query.strip())
@@ -1123,8 +1123,10 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
             active = [k for k in book_priority if k in FETCH_BATCH_MAP]
         elif db_source == 'all':
             fast_priority = ['verified_literature', 'pubmed', 'crossref', 'openalex', 'europepmc', 'doaj', 'semanticscholar', 'core', 'zenodo']
-            # The licensed Elsevier API is included in comprehensive searches only for VIP.
-            if not is_guest and (personal_elsevier_key or os.environ.get('ELSEVIER_API_KEY', '').strip() or ELSEVIER_API_KEY):
+            # Every tier may use its own key; only VIP may use the platform key.
+            if personal_elsevier_key:
+                fast_priority.insert(0, 'elsevier')
+            elif not is_guest and (os.environ.get('ELSEVIER_API_KEY', '').strip() or ELSEVIER_API_KEY):
                 fast_priority.append('elsevier')
             if search_scope != 'papers':
                 fast_priority.extend(['googlebooks', 'openlibrary'])
@@ -1137,7 +1139,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         if search_scope == 'papers':
             active = [k for k in active if k not in ('googlebooks', 'openlibrary')]
 
-        if is_guest and 'elsevier' in active:
+        if is_guest and not personal_elsevier_key and 'elsevier' in active:
             active.remove('elsevier')
         if not is_include_preprint and 'arxiv' in active:
             active.remove('arxiv')
@@ -1187,8 +1189,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         _set_task(task_id, _search_deadline=search_started + search_max_seconds)
         rounds_without_new_papers = 0
         def provider_in_cooldown(name):
-            circuit = "elsevier:" + hashlib.sha256(personal_elsevier_key.encode()).hexdigest() if name == "elsevier" and personal_elsevier_key else name
-            return is_engine_in_cooldown(circuit)
+            # Scopus handles its own cooldown so it can explain entitlement and
+            # quota failures to the caller without retrying the upstream API.
+            return False if name == "elsevier" else is_engine_in_cooldown(name)
         with open(txt_path, "w", encoding="utf-8") as txt_file:
             txt_file.write(f"Knowledge Ocean Exploration Log\nTopic: {query}\nDate: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n" + "="*70 + "\n\n")
 
@@ -1231,8 +1234,10 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                             batch_papers = fut.result()
                             provider_diagnostics[eng_name] = {
                                 "returned": provider_diagnostics.get(eng_name, {}).get("returned", 0) + len(batch_papers or []),
-                                "status": "responded"
+                                "status": engine_states[eng_name].get("provider_status", "responded")
                             }
+                            if engine_states[eng_name].get("warning"):
+                                provider_diagnostics[eng_name]["warning"] = engine_states[eng_name]["warning"]
                             for p in batch_papers:
                                 if not isinstance(p, CanonicalPaper):
                                     continue
@@ -1305,12 +1310,16 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                 pct = min(75, 15 + int((len(paper_index) / target_limit) * 60)) if not unlimited else min(75, 15 + round_no * 10)
                 _set_task(task_id, progress=pct, message=f"تم جمع وتدقيق {len(paper_index)} من أصل {target_limit} بحث...")
 
+        provider_warnings = [info["warning"] for info in provider_diagnostics.values() if info.get("warning")]
+        _set_task(task_id, provider_diagnostics=provider_diagnostics, provider_warnings=provider_warnings)
         all_canonical = paper_index.get_all()
         if not all_canonical:
             if task_id in CANCELLED_TASKS:
                 raise ValueError("تم إيقاف البحث بناءً على طلبك (لم يتم العثور على أبحاث بعد).")
             detail = ", ".join(f"{name}: {info.get('status', 'unknown')} ({info.get('returned', 0)})" for name, info in sorted(provider_diagnostics.items()))
             log.warning("Task %s returned no qualifying papers. Providers: %s", task_id, detail or "no providers returned")
+            if db_source == "elsevier" and provider_warnings:
+                raise ValueError(provider_warnings[0])
             raise ValueError("لم يتم استرجاع أوراق علمية مطابقة. قد تكون قواعد البيانات غير متاحة أو شروط البحث شديدة التقييد. راجع سجلات المزودين. / No matching papers retrieved; provider errors or restrictive filters may be responsible.")
 
         # Ensure exact DOI result has enriched authors, real year, and substantive title
@@ -1732,7 +1741,7 @@ async def api_guest_quota(request: Request, response: Response, password: str = 
 @app.post("/api/login")
 async def api_login(request: Request):
     """
-    تسجيل الدخول بالرمز الثانوي أو رمز VIP مع حظر IP لمدة 24 ساعة بعد 5 محاولات خاطئة متتالية.
+    تسجيل الدخول برمز الوصول أو رمز VIP مع حظر IP لمدة 24 ساعة بعد 5 محاولات خاطئة متتالية.
     """
     require_same_origin(request)
     ip, _ = get_fingerprint(request)
@@ -1791,7 +1800,7 @@ async def api_login(request: Request):
             "is_vip": False,
             "is_other": True,
             "quota": SECONDARY_SEARCH_QUOTA,
-            "message": f"تم تفعيل الرمز الثانوي بنجاح! حصة يومية متجددة سعتها {SECONDARY_SEARCH_QUOTA} بحثاً (تتجدد 12:00 ص بتوقيت بغداد)."
+            "message": f"تم تفعيل رمز الوصول بنجاح! حصة يومية متجددة سعتها {SECONDARY_SEARCH_QUOTA} بحثاً (تتجدد 12:00 ص بتوقيت بغداد)."
         })
         issue_session(response, user_hash_for(password), secure=request.url.scheme == "https")
         return response
@@ -1859,7 +1868,7 @@ async def download_user_guide(language: str):
         raise HTTPException(503, "User guide temporarily unavailable")
     return FileResponse(path, media_type="application/pdf", filename=filename, headers={
         "Content-Language": language,
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "no-cache, must-revalidate",
         "X-Content-Type-Options": "nosniff",
     })
 
@@ -1967,8 +1976,8 @@ async def start_search(
     is_guest = not is_vip
 
     # Validate licensed-provider access before charging any guest quota.
-    if db_source == "elsevier" and not is_vip:
-        return JSONResponse(status_code=403, content={"error": "قاعدة بيانات Scopus (Elsevier) تتطلب مفتاح الوصول (VIP)."})
+    if db_source == "elsevier" and not (is_vip or elsevier_api_key):
+        return JSONResponse(status_code=403, content={"error": "أضف مفتاح Elsevier الشخصي من نافذة الدخول لاستخدام Scopus. / Add your personal Elsevier API key in Sign In to use Scopus."})
 
     if is_vip or is_other:
         prospective_owner = user_hash_for(clean_pwd) if clean_pwd else owner_session
@@ -2073,7 +2082,7 @@ async def start_search(
         "guest_token": clean_guest_token if is_guest else "",
         "search_scope": search_scope,
         "doc_type_filter": doc_type_filter,
-        "elsevier_api_key": elsevier_api_key if is_vip else ""
+        "elsevier_api_key": elsevier_api_key
     }, daemon=True).start()
     return response
 

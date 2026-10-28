@@ -117,7 +117,10 @@ class TestFindDoiMatching(unittest.TestCase):
     def test_non_doi_exact_match_ranked_first_with_url(self):
         from scholarly_registry import search_verified_registry
         target = "RP-HPLC METHOD FOR DETERMINATION OF NAPROXEN IN PHARMACEUTICAL DOSAGE FORM"
-        verified_items = search_verified_registry(target)
+        from unittest.mock import patch
+        fixture = {"title": "RP-HPLC" + target[7:].lower(), "doi": None, "doi_url": "https://www.researchgate.net/publication/test-fixture", "authors": ["Test Author"], "journal": "Test Journal", "year": "2025"}
+        with patch("scholarly_registry.load_verified_registry", return_value=[fixture]):
+            verified_items = search_verified_registry(target)
         self.assertGreaterEqual(len(verified_items), 1)
         top_verified = verified_items[0]
         self.assertEqual(top_verified["similarity"], 100.0)

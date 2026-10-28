@@ -6,10 +6,14 @@ from unittest.mock import patch
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 class HardeningRegressionTests(unittest.TestCase):
-    def test_scopus_vip_only(self):
-        text = (ROOT / "app.py").read_text("utf-8")
-        self.assertIn('if db_source == "elsevier" and not is_vip:', text)
-        self.assertIn("if is_guest and 'elsevier' in active:", text)
+    def test_platform_scopus_key_is_never_exposed_to_public_clients(self):
+        import app
+        from fastapi.testclient import TestClient
+        with patch.dict("os.environ", {"ELSEVIER_API_KEY": "PRIVATE_PLATFORM_KEY"}):
+            with TestClient(app.app) as client:
+                response = client.get("/api/settings")
+        self.assertNotIn("PRIVATE_PLATFORM_KEY", response.text)
+        self.assertEqual(response.json()["elsevier_api_key"], "***")
 
     def test_author_search_not_filtered_by_title(self):
         source = (ROOT / "app.py").read_text("utf-8")
