@@ -977,7 +977,11 @@
           }
           loadSettings();
         } else {
-          setSettingsStatusMsg({ type: "error", text: data.message || (lang === "ar" ? "حدث خطأ أثناء الحفظ" : "An error occurred while saving") });
+          setSettingsStatusMsg({ type: "error", text: data.detail || data.message || (lang === "ar" ? "الإعدادات تُضبط من خادم التطبيق أو Secrets" : "Configure settings in server environment / secrets") });
+          if (isFirstRun && isLocal) {
+            try { localStorage.setItem("ko_first_run_completed", "true"); } catch (_) {}
+            setShowFirstRunModal(false);
+          }
         }
       } catch (err) {
         setSettingsStatusMsg({ type: "error", text: lang === "ar" ? "تعذر الاتصال بالخادم لحفظ الإعدادات" : "Unable to connect to server to save settings" });
@@ -1461,7 +1465,7 @@
         return;
       }
 
-      if (!isLocal && !password.trim() && dbSource === "elsevier") {
+      if (!quota.isVip && dbSource === "elsevier") {
         showAlert(lang === "ar" ? "قاعدة Scopus (Elsevier) غير متاحة للضيوف وتتطلب إدخال مفتاح الوصول (VIP) أو استخدام النسخة المحلية." : "Scopus (Elsevier) is unavailable for guests. VIP key or Local edition required.", "error");
         return;
       }
