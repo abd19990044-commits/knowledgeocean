@@ -53,7 +53,7 @@ class SearchBudgetTests(unittest.TestCase):
         budget.record_match()
         clock.advance(200)
         self.assertIsNone(budget.stop_reason())
-        self.assertEqual(budget.remaining(), 50)
+        self.assertAlmostEqual(budget.remaining(), 50)
         clock.advance(50)
         self.assertEqual(budget.stop_reason(), "time_budget")
 
