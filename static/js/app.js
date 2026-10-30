@@ -84,7 +84,7 @@
     en: {
       appName: "Knowledge Ocean",
       appVersion: "v1.0",
-      subtitle: "High-Precision Academic Retrieval & Documentation System",
+      subtitle: "Academic literature retrieval and reference management",
       developerCredit: "Developed by ABDULSALAM S. HASAN",
       vipUnlimitedBadge: "✨ VIP Access Active (Unlimited Searches)",
       quotaBadgeText: "Guest Quota: 50 Searches (Renews 12:00 AM Baghdad time)",
@@ -103,11 +103,11 @@
       // Nav Tabs
       tabExplorer: "Comprehensive Academic Explorer",
       tabDoiHub: "DOI & Citation Resolver",
-      instantLookupBadge: "Instant Lookup",
+      instantLookupBadge: "Metadata lookup",
 
       // DOI Hub Header
       doiHubTitle: "DOI & Academic Citation Resolver",
-      doiHubSubtitle: "Lookup, verify, and resolve scholarly metadata via Digital Object Identifier (DOI) or match paper titles to verified citations with instant APA / BibTeX generation.",
+      doiHubSubtitle: "Retrieve publication metadata using a DOI, or identify candidate records by title similarity. Review the bibliographic details before using a reference.",
       returnToExplorer: "Return to Academic Explorer",
       doiSubtabDirect: "Direct DOI Lookup",
       doiSubtabTitle: "Match Title to DOI",
@@ -115,10 +115,10 @@
       // DOI Direct Tab
       doiInputLabel: "Enter direct DOI or full link (https://doi.org/...)",
       doiInputPlaceholder: "e.g. 10.1007/s40278-024-60584-4 or https://doi.org/10.1186/s13256-025-05459-w",
-      doiLookupBtn: "Lookup & Verify 🔍",
-      doiLookupLoading: "Looking up DOI...",
-      doiExamplesLabel: "Sample DOIs for quick test:",
-      peerReviewed: "Peer-Reviewed",
+      doiLookupBtn: "Retrieve DOI metadata",
+      doiLookupLoading: "Retrieving publication metadata…",
+      doiExamplesLabel: "Example identifiers:",
+      peerReviewed: "Published record",
       preprint: "Preprint",
       openAccess: "Open Access",
       citationsCount: "citations",
@@ -131,59 +131,67 @@
       rgDownloadBtn: "📥 Available for Download (ResearchGate)",
       rgSearchBtn: "Search in ResearchGate",
       rgSearchTitle: "Search and verify publication on ResearchGate platform",
-      copyApaBtn: "Copy APA 7th",
+      copyApaBtn: "Copy APA 7 reference",
       copyBibtexBtn: "Copy BibTeX",
       copyRisBtn: "Copy RIS",
-      copiedApaAlert: "APA 7th citation copied successfully",
+      copiedApaAlert: "The APA 7 reference has been copied.",
       copiedBibtexAlert: "BibTeX citation copied successfully",
       copiedRisAlert: "RIS citation copied successfully",
 
       // DOI Title Tab
-      titleInputLabel: "Enter full paper title to extract DOI and metadata",
+      titleInputLabel: "Enter the complete title or a substantial part of the publication title",
       titleInputPlaceholder: "e.g. Climate change impacts on biodiversity and ecosystems...",
-      titleFindBtn: "Extract DOI 🔍",
-      titleFindLoading: "Searching academic databases...",
-      titleMatchHeader: "Verified matching papers found:",
-      detailedCheckBtn: "🔍 Detailed Check",
+      titleFindBtn: "Search by title",
+      titleFindLoading: "Searching academic databases…",
+      titleMatchHeader: "Candidate records meeting the similarity threshold:",
+      detailedCheckBtn: "Retrieve record details",
       searchRgTitle: "Search on ResearchGate",
       searchScihubTitle: "Search on Sci-Hub",
 
+      titleMinMatchNote: "Only records with title similarity of 50% or higher are displayed. Similarity does not establish that two records describe the same publication.",
+      titleScanning: "The selected academic databases are being queried. Records below 50% similarity are excluded while the remaining source queries continue.",
+      titleNoMatch: "The database queries are complete. No publication meeting the minimum title similarity of 50% was found. Review the title or use the DOI if available.",
+      titleScanIncomplete: "No publication meeting the minimum title similarity of 50% was found in the responding sources. Some database queries could not be completed; please try again later.",
+      titlePartialWarning: "The displayed records meet the 50% similarity threshold. Some database queries could not be completed, so source coverage is incomplete.",
+      titleScanComplete: "The database queries are complete. Review the title, authors, year, and DOI of each candidate record.",
+      titleSearchFailed: "The title search could not be completed. Please review the input or try again later.",
+      alertCopySuccess: "The selected content has been copied.",
       // Explorer Top Banners
-      localBannerText: "⚡ Running in Standalone Local Environment — PDF files are saved directly to your computer without external dependencies.",
+      localBannerText: "Local deployment: generated reports are stored on this device. Source queries require an internet connection.",
       cloudBannerTitle: "Run Knowledge Ocean locally on your PC",
       cloudBannerBadge: "Full Standalone Version",
-      cloudBannerDesc: "Download the portable package and run the server with one click via run_local.bat for fast searching and direct local saving.",
+      cloudBannerDesc: "Download the local package and follow its setup instructions to run the application on your device.",
       cloudBannerBtn: "Download Local Package (ZIP) ↓",
 
       // Search Form
-      searchSettingsTitle: "Comprehensive Academic Search & Settings",
-      localFullBadge: "Local Full Edition (Unlimited Discovery & Extraction)",
+      searchSettingsTitle: "Academic literature search",
+      localFullBadge: "Local deployment",
       cloudQuotaBadge: "Cloud Usage (50 papers with full index)",
       operationModeLabel: "Operation Mode",
-      localAccessText: "Full Open Local Access (No Key Needed)",
+      localAccessText: "Local access",
       historyBtn: "Search History ◫",
       historyBtnLoading: "Loading...",
       accessKeyLabel: "Access Key (VIP)",
       accessKeyPlaceholder: "Enter VIP access key for unlimited search...",
       searchModeLabel: "Search Mode",
-      modeKeyword: "Keywords & Boolean (AND, OR, NOT)",
-      modeAuthor: "Author Name (Author Mode)",
-      modeExact: "Exact Phrase Match",
-      modeDoi: "🎯 Direct DOI Lookup (Jump to DOI Hub ↗)",
-      modeTitleDoi: "📑 Match Title to DOI (Jump to DOI Hub ↗)",
-      queryLabel: "Search Query (Keywords / Topics / Authors)",
+      modeKeyword: "Keywords and Boolean operators (AND, OR, NOT)",
+      modeAuthor: "Author search",
+      modeExact: "Exact phrase",
+      modeDoi: "DOI metadata lookup",
+      modeTitleDoi: "Identify records by publication title",
+      queryLabel: "Search terms, publication title, author, or DOI",
       clearQueryBtn: "Clear Query ✕",
       queryPlaceholder: "Enter research topic, keywords, paper title, or author name...",
-      exampleQueriesLabel: "Quick search suggestions:",
+      exampleQueriesLabel: "Example search queries:",
 
       // Advanced Filters
-      strictTitleLabel: "Strict Title Filter (Title Must Filter)",
+      strictTitleLabel: "Require terms in the title",
       strictTitlePrecisionBadge: "Title Matching",
       strictTitleDesc: "Choose whether search keywords must appear strictly in the paper title, or across both title and abstract.",
-      strictTitleOnBadge: "ON - Strict Title Matching",
-      strictTitleOnText: "Strictly excludes any paper whose title does not contain your keywords. Ensures 99% topic precision by scanning deep database batches until your requested paper count is met or repositories are exhausted. (Recommended for exact topics or specific queries).",
-      strictTitleOffBadge: "OFF - Smart Comprehensive Search (Default)",
-      strictTitleOffText: "Searches across both titles and abstracts to ensure no relevant study is missed, automatically prioritizing papers matching terms in their titles at the top. (Recommended for broad academic discovery and full literature coverage).",
+      strictTitleOnBadge: "Enabled: title matching",
+      strictTitleOnText: "Restricts retrieval to records whose titles satisfy the search terms. Result availability depends on source coverage, filters, and the retrieval time limit.",
+      strictTitleOffBadge: "Default: title and abstract matching",
+      strictTitleOffText: "Matches search terms against titles and available abstracts, with title matches receiving greater ranking weight. Source coverage and metadata availability may limit retrieval.",
       timeRangeLabel: "Time Range (Publication Years)",
       yearFromPlaceholder: "From (e.g. 2020)",
       yearToPlaceholder: "To (e.g. 2026)",
@@ -197,9 +205,9 @@
       limit50: "50 Papers",
       limit100: "100 Results",
       limit250: "250 Results",
-      limitAll: "Comprehensive (Everything Found)",
+      limitAll: "All available results",
       dbSourcesLabel: "Databases & Sources",
-      sourceAll: "All Engines (12 Open Science Engines)",
+      sourceAll: "All configured academic sources",
       sourcePubmed: "PubMed (Biomedical & Life Sciences)",
       sourceElsevierLocal: "Scopus (Elsevier)",
       sourceElsevierCloud: "Scopus (Elsevier) [Personal API key or VIP]",
@@ -215,22 +223,22 @@
       includePreprintsText: "Include preprints (arXiv, bioRxiv, OpenAlex, etc.)",
       affiliationLabel: "Institutional Affiliation (Optional - Match University or Center)",
       affiliationPlaceholder: "e.g. Harvard University, Oxford, MIT, University of Mosul...",
-      fulltextScrapingLabel: "Download Full-Text Papers (PDF Scraping)",
+      fulltextScrapingLabel: "Include available abstracts",
       fulltextScrapingBadge: "Advanced Optional Feature",
-      fulltextScrapingDesc: "Includes comprehensive scholarly abstracts in search results and PDF reports",
-      fulltextWarningTitle: "Time Consumption Notice:",
-      fulltextWarningText: "Downloading full papers takes extra time depending on publisher servers and volume.",
-      fulltextQualityBadge: "Academic Quality Guarantee: Only verified academic PDF files (%PDF) are saved.",
-      fulltextDisabledNote: "Disabled by default for fast searching and instant abstract generation in seconds.",
-      startSearchBtn: "Start Academic Search 🔍",
-      searchingBtn: "Searching...",
-      cancelSearchBtn: "Cancel",
+      fulltextScrapingDesc: "Include available abstracts in the results and search report.",
+      fulltextWarningTitle: "Retrieval duration:",
+      fulltextWarningText: "Retrieval time depends on the number of records and source response times.",
+      fulltextQualityBadge: "Downloaded files are checked for a valid PDF signature.",
+      fulltextDisabledNote: "Disabled by default. Abstract availability depends on source metadata and access permissions.",
+      startSearchBtn: "Start literature search",
+      searchingBtn: "Retrieving records…",
+      cancelSearchBtn: "Stop search",
 
       // Results Section
-      retrievedHeader: "Retrieved Research Papers & Studies",
+      retrievedHeader: "Retrieved publication records",
       papersRetrievedCount: "papers retrieved",
       filterAll: "All Papers",
-      filterPeer: "Peer-Reviewed",
+      filterPeer: "Published records",
       filterPreprints: "Preprints",
       filterOa: "Open Access",
       filterResultsPlaceholder: "Filter current results (by title, journal, author, DOI)...",
@@ -250,18 +258,18 @@
       noAbstractText: "No abstract text available for this paper in open metadata.",
 
       // Modals
-      abstractModalTitle: "Research Abstract",
+      abstractModalTitle: "Publication abstract",
       copyAbstractBtn: "📋 Copy Abstract",
       copyAbstractDone: "✓ Copied",
       modalCloseBtn: "Close",
-      downloadCompleteTitle: "Search & Compilation Completed",
-      downloadCompleteDesc: "Comprehensive academic dossier generated and ready for exploration.",
+      downloadCompleteTitle: "Retrieval and report preparation complete",
+      downloadCompleteDesc: "The search report is available for review and download.",
       downloadPackageBtn: "📥 Download Package",
       viewFileBtn: "👁 View Results File",
 
       // History Modal
       historyModalTitle: "Search History",
-      historyModalDesc: "Archive of past searches and downloadable packages",
+      historyModalDesc: "Previous search records and associated reports",
       clearHistoryBtn: "Clear All History",
       historyEmptyText: "No previous searches found. Completed searches will appear here.",
       historyDownloadBtn: "📥 Download File",
@@ -269,12 +277,12 @@
       historyDeleteBtn: "Delete",
 
       // Settings Modal
-      settingsModalTitle: "Researcher & Academic Source Settings",
-      settingsEmailLabel: "Academic Email (Polite Pool for Crossref & Unpaywall)",
+      settingsModalTitle: "Researcher and source settings",
+      settingsEmailLabel: "Contact email for source requests",
       settingsElsevierLabel: "Scopus / Elsevier API Key (Optional)",
       settingsElsevierPlaceholder: "Enter key to activate Scopus, or leave blank",
-      settingsElsevierNote: "💡 For direct Scopus / ScienceDirect access, enter your key above. If left blank, the system automatically queries 9 other open science databases.",
-      settingsStatusHeader: "Academic Repositories & Database Status (10 Repositories):",
+      settingsElsevierNote: "Scopus access depends on the API key permissions and available quota. Other configured sources are queried independently.",
+      settingsStatusHeader: "Academic source availability",
       statusConnected: "🟢 Connected",
       statusActive: "🟢 Active",
       statusInactive: "⚪ Inactive",
@@ -290,36 +298,36 @@
       docTypeAll: "All Document Types",
       docTypeReview: "Review Articles (Literature & Systematic)",
       docTypeMetaAnalysis: "Meta-Analyses Only",
-      docTypeResearch: "Original Research Articles",
+      docTypeResearch: "Research articles",
       docTypeBook: "Books & Book Chapters",
       docTypeConference: "Conference Proceedings",
       filterReviews: "Reviews",
       filterBooks: "Books",
-      filterResearch: "Research Articles",
+      filterResearch: "Research articles",
       badgeReview: "Review Article",
       badgeMetaAnalysis: "Meta-Analysis",
       badgeBook: "Book / Chapter",
       badgeConference: "Conference Paper",
-      badgeResearch: "Research Article",
+      badgeResearch: "Research article",
 
       // Footer
-      footerTagline: "Knowledge Ocean v1.0 • Canonical Architecture • Multi-Source Scholarly Retrieval",
+      footerTagline: "Knowledge Ocean v1.0 • Academic literature retrieval and referencing",
       footerDownloadLocal: "💻 Download Standalone Local Edition (ZIP)",
 
       // Alerts & Messages
-      alertEnterQuery: "Please enter a search keyword or topic",
+      alertEnterQuery: "Enter a research topic or search terms.",
       alertElsevierGuest: "Save your personal Elsevier API key in Sign In to use Scopus with your current account tier.",
-      alertSendingRequest: "Sending request to academic search engines...",
-      alertSearchStarted: "Multi-threaded academic discovery and indexing started...",
-      alertServerOffline: "Unable to connect to server — please verify backend is running",
+      alertSendingRequest: "Submitting the query to academic sources…",
+      alertSearchStarted: "Publication retrieval has started.",
+      alertServerOffline: "The server could not be reached. Please try again later.",
       alertSearchCancelled: "Search cancelled",
-      alertSearchFailed: "Search operation failed",
+      alertSearchFailed: "The search could not be completed.",
       alertCopySuccess: "Copied to clipboard successfully"
     },
     ar: {
       appName: "Knowledge Ocean",
       appVersion: "v1.0",
-      subtitle: "استرجاع وتوثيق أكاديمي فائق الدقة",
+      subtitle: "استرجاع الأدبيات العلمية وإدارة المراجع",
       developerCredit: "Developed by ABDULSALAM S. HASAN",
       vipUnlimitedBadge: "✨ VIP Access Active (Unlimited Searches)",
       quotaBadgeText: "رصيد الضيوف: 50 بحثاً (يتجدد تلقائياً 12:00 ص بتوقيت بغداد)",
@@ -338,11 +346,11 @@
       // Nav Tabs
       tabExplorer: "المستودع الأكاديمي الشامل",
       tabDoiHub: "منظومة توثيق ومعرّفات DOI",
-      instantLookupBadge: "استعلام وتوثيق فوري",
+      instantLookupBadge: "استرجاع البيانات الوصفية",
 
       // DOI Hub Header
       doiHubTitle: "منظومة التوثيق الأكاديمي ومعرّفات DOI",
-      doiHubSubtitle: "بوابة فحص واسترجاع بيانات الأبحاث الأكاديمية عبر المعرّف الرقمي المعتمد عالمياً (DOI)، أو مطابقة عناوين الأبحاث لاستخراج المعرّفات والبيانات الوصفية الرسمية بدقة متناهية مع روابط مباشرة وتوثيق APA / BibTeX فوري.",
+      doiHubSubtitle: "استرجاع البيانات الوصفية للمنشورات باستخدام معرّف DOI، أو تحديد السجلات المرشحة وفق تشابه العناوين. تُراجع البيانات الببليوغرافية قبل اعتماد المرجع.",
       returnToExplorer: "العودة للمستودع الأكاديمي الشامل",
       doiSubtabDirect: "فحص واستعلام معرّف DOI",
       doiSubtabTitle: "استخراج المعرّف من العنوان",
@@ -350,11 +358,11 @@
       // DOI Direct Tab
       doiInputLabel: "أدخل معرّف DOI المباشر أو رابطه الكامل",
       doiInputPlaceholder: "مثال: 10.1007/s40278-024-60584-4 أو https://doi.org/10.1186/s13256-025-05459-w",
-      doiLookupBtn: "فحص واسترجاع المعرف 🔍",
-      doiLookupLoading: "جاري الاستعلام...",
-      doiExamplesLabel: "أمثلة معرّفات للتجربة السريعة:",
-      peerReviewed: "بحث محكّم",
-      preprint: "مسودة (Preprint)",
+      doiLookupBtn: "استرجاع بيانات المعرّف",
+      doiLookupLoading: "جارٍ استرجاع بيانات المنشور…",
+      doiExamplesLabel: "أمثلة على المعرّفات:",
+      peerReviewed: "سجل منشور",
+      preprint: "مسودة قبل النشر",
       openAccess: "وصول مفتوح",
       citationsCount: "استشهاد",
       sourcesLabel: "المصادر:",
@@ -366,59 +374,67 @@
       rgDownloadBtn: "📥 متاح للتنزيل (ResearchGate)",
       rgSearchBtn: "البحث في ResearchGate",
       rgSearchTitle: "البحث والتحقق من توفر البحث وتنزيله عبر منصة ResearchGate",
-      copyApaBtn: "نسخ APA 7th",
+      copyApaBtn: "نسخ المرجع وفق APA 7",
       copyBibtexBtn: "نسخ BibTeX",
       copyRisBtn: "نسخ RIS",
-      copiedApaAlert: "تم نسخ توثيق APA بنجاح",
+      copiedApaAlert: "نُسخ المرجع وفق APA 7.",
       copiedBibtexAlert: "تم نسخ كود BibTeX بنجاح",
       copiedRisAlert: "تم نسخ كود RIS بنجاح",
 
       // DOI Title Tab
-      titleInputLabel: "أدخل العنوان الكامل للبحث العلمي لاستخراج المعرف وتوثيقه",
+      titleInputLabel: "أدخل عنوان المنشور كاملًا أو جزءًا جوهريًا منه",
       titleInputPlaceholder: "مثال: Digital learning and student engagement in higher education...",
-      titleFindBtn: "استخراج المعرف 🔍",
-      titleFindLoading: "جاري البحث في القواعد الأكاديمية...",
-      titleMatchHeader: "أبحاث مطابقة ومؤكدة تم العثور عليها:",
-      detailedCheckBtn: "🔍 فحص تفصيلي",
+      titleFindBtn: "البحث بالعنوان",
+      titleFindLoading: "جارٍ البحث في قواعد البيانات العلمية…",
+      titleMatchHeader: "السجلات المرشحة المستوفية لحد التشابه:",
+      detailedCheckBtn: "استرجاع تفاصيل السجل",
       searchRgTitle: "البحث في منصة ResearchGate",
       searchScihubTitle: "البحث في مستودع Sci-Hub",
 
+      titleMinMatchNote: "تُعرض السجلات التي تبلغ نسبة تشابه عناوينها 50% فأعلى. ولا تكفي نسبة التشابه وحدها لإثبات أن السجلين يعودان إلى المنشور نفسه.",
+      titleScanning: "يجري الاستعلام في قواعد البيانات العلمية المحددة. تُستبعد السجلات الأقل من 50% تشابهًا، مع استمرار استعلامات المصادر المتبقية.",
+      titleNoMatch: "اكتملت استعلامات قواعد البيانات. لم يُعثر على منشور يحقق الحد الأدنى لتشابه العنوان البالغ 50%. يُرجى مراجعة العنوان أو استخدام معرّف DOI إن توفر.",
+      titleScanIncomplete: "لم يُعثر في المصادر التي استجابت على منشور يحقق الحد الأدنى لتشابه العنوان البالغ 50%. تعذّر استكمال بعض استعلامات قواعد البيانات؛ يُرجى المحاولة لاحقًا.",
+      titlePartialWarning: "تستوفي السجلات المعروضة حد التشابه البالغ 50%. تعذّر استكمال بعض استعلامات قواعد البيانات، ولذلك تظل تغطية المصادر غير مكتملة.",
+      titleScanComplete: "اكتملت استعلامات قواعد البيانات. تُراجع بيانات العنوان والمؤلفين والسنة ومعرّف DOI لكل سجل مرشح.",
+      titleSearchFailed: "تعذّر استكمال البحث بالعنوان. يُرجى مراجعة المدخلات أو المحاولة لاحقًا.",
+      alertCopySuccess: "نُسخ المحتوى المحدد.",
       // Explorer Top Banners
-      localBannerText: "⚡ أنت تعمل الآن في بيئة التشغيل المحلي المستقلة — يتم حفظ ملفات PDF المجمعة مباشرة على جهازك وتعمل الواجهة بدون الحاجة لإنترنت خارجي.",
+      localBannerText: "التشغيل المحلي: تُحفظ التقارير الناتجة على هذا الجهاز. ويتطلب الاستعلام في المصادر اتصالًا بالإنترنت.",
       cloudBannerTitle: "تشغيل محيط المعرفة محلياً على حاسوبك الشخصي",
       cloudBannerBadge: "نسخة كاملة مستقلة",
-      cloudBannerDesc: "بإمكانك تنزيل الحزمة المحمولة وتشغيل السيرفر على جهازك بنقرة زر واحدة عبر سكريبت run_local.bat للبحث السريع، حفظ الملفات مباشرة على حاسوبك، وتجاوز أي قيود.",
+      cloudBannerDesc: "نزّل حزمة التشغيل المحلي واتبع تعليمات الإعداد لتشغيل التطبيق على جهازك.",
       cloudBannerBtn: "تحميل حزمة التشغيل المحلي (ZIP) ↓",
 
       // Search Form
-      searchSettingsTitle: "إعدادات واستعلام البحث الشامل",
-      localFullBadge: "نسخة محلية مفتوحة بالكامل (استخراج شامل بلا قيود وبلا رمز)",
+      searchSettingsTitle: "البحث في الأدبيات العلمية",
+      localFullBadge: "تشغيل محلي",
       cloudQuotaBadge: "الاستخدام السحابي (50 بحثاً مع فهرس شامل مفصل)",
       operationModeLabel: "وضع التشغيل الأكاديمي",
-      localAccessText: "وصول محلي كامل ومفتوح (بدون رمز)",
+      localAccessText: "وصول محلي",
       historyBtn: "سجل الأبحاث ◫",
-      historyBtnLoading: "جاري...",
+      historyBtnLoading: "جارٍ...",
       accessKeyLabel: "مفتاح الوصول (VIP)",
       accessKeyPlaceholder: "أدخل مفتاح الوصول لبحث غير محدود...",
       searchModeLabel: "نمط البحث",
-      modeKeyword: "كلمات متفرقة (Keywords + Boolean: AND, OR, NOT)",
-      modeAuthor: "اسم الباحث (Author Mode)",
-      modeExact: "تطابق تام (Exact Match)",
-      modeDoi: "🎯 معرف DOI مباشر (انتقال فوري للمنظومة التوثيقية ↗)",
-      modeTitleDoi: "📑 البحث باسم البحث لإيجاد الـ DOI (انتقال فوري للمنظومة التوثيقية ↗)",
-      queryLabel: "الاستعلام البحثي (Search Query / DOI / Keywords)",
+      modeKeyword: "الكلمات المفتاحية والمعاملات المنطقية (AND, OR, NOT)",
+      modeAuthor: "البحث باسم المؤلف",
+      modeExact: "العبارة المطابقة",
+      modeDoi: "استرجاع البيانات باستخدام DOI",
+      modeTitleDoi: "تحديد السجلات بعنوان المنشور",
+      queryLabel: "مصطلحات البحث أو عنوان المنشور أو اسم المؤلف أو معرّف DOI",
       clearQueryBtn: "مسح الاستعلام ✕",
       queryPlaceholder: "اكتب موضوع البحث، كلمات مفتاحية، عنوان دراسة، أو اسم باحث...",
-      exampleQueriesLabel: "أمثلة استعلامات للتجربة السريعة:",
+      exampleQueriesLabel: "أمثلة على استعلامات البحث:",
 
       // Advanced Filters
-      strictTitleLabel: "فلتر العنوان الإلزامي (Title Must Filter)",
+      strictTitleLabel: "اشتراط ورود المصطلحات في العنوان",
       strictTitlePrecisionBadge: "مطابقة العنوان",
       strictTitleDesc: "تحديد نطاق مطابقة الكلمات: هل يُشترط وجودها في عنوان البحث نفسه، أم يُكتفى بوجودها في العنوان أو الملخص.",
-      strictTitleOnBadge: "مُفعّل (ON) - حصر إلزامي في العنوان",
-      strictTitleOnText: "يستبعد أي دراسة لا تتضمن كلمات البحث صراحةً في عنوانها (Title)، مما يضمن أعلى دقة وتطابقاً بنسبة 99%. يواصل المحرك المسح التكراري لقواعد البيانات حتى استيفاء العدد المطلوب كاملاً أو نفاد النتائج المتاحة. (موصى به عند البحث عن موضوع دقيق ومحدد).",
-      strictTitleOffBadge: "غير مُفعّل (OFF) - بحث شامل وتغطية قصوى (الافتراضي)",
-      strictTitleOffText: "يبحث عن الكلمات في العناوين والملخصات معاً لضمان عدم تفويت أي دراسة قيّمة ذات صلة قد تذكر الموضوع داخل ملخصها. يتم ترتيب النتائج بذكاء بحيث تتصدر الأبحاث التي تطابق كلماتها في العنوان أولاً، تليها الأكثر صلة موضوعياً. (موصى به للاستكشاف الأكاديمي الشامل وتغطية كافة جوانب الموضوع).",
+      strictTitleOnBadge: "مُفعّل: المطابقة في العنوان",
+      strictTitleOnText: "يقتصر الاسترجاع على السجلات التي تستوفي عناوينها مصطلحات البحث. ويتأثر عدد النتائج بتغطية المصادر والمرشحات والمهلة الزمنية للاسترجاع.",
+      strictTitleOffBadge: "الافتراضي: المطابقة في العنوان والملخص",
+      strictTitleOffText: "تُطابق مصطلحات البحث مع العناوين والملخصات المتاحة، مع منح المطابقة في العنوان وزنًا أعلى عند ترتيب النتائج. وقد تحدّ تغطية المصادر وتوافر البيانات الوصفية من الاسترجاع.",
       timeRangeLabel: "النطاق الزمني (الفترة)",
       yearFromPlaceholder: "من (مثال 2020)",
       yearToPlaceholder: "إلى (مثال 2026)",
@@ -432,9 +448,9 @@
       limit50: "50 بحثاً",
       limit100: "100 نتيجة",
       limit250: "250 نتيجة",
-      limitAll: "شامل لايجاد كل ما هو موجود",
+      limitAll: "جميع النتائج المتاحة",
       dbSourcesLabel: "قواعد البيانات والمصادر",
-      sourceAll: "شامل لايجاد كل ما هو موجود (12 محركاً)",
+      sourceAll: "جميع المصادر العلمية المهيأة",
       sourcePubmed: "PubMed (طبية وحيوية)",
       sourceElsevierLocal: "Scopus (Elsevier)",
       sourceElsevierCloud: "Scopus (Elsevier) [مفتاحك الشخصي أو VIP]",
@@ -446,33 +462,33 @@
       sourceCore: "CORE (وصول حر)",
       sourceZenodo: "Zenodo (CERN / Open Access)",
       sourceBooks: "مكتبات الكتب (Google Books, Open Library)",
-      preprintsLabel: "المسودات (Preprints)",
+      preprintsLabel: "مسودات قبل النشر",
       includePreprintsText: "تضمين مسودات ما قبل النشر (arXiv, bioRxiv, OpenAlex...)",
       affiliationLabel: "الانتماء المؤسسي (اختياري - لمطابقة الجامعة أو المركز)",
       affiliationPlaceholder: "مثال: University of Mosul, Harvard University...",
-      fulltextScrapingLabel: "تنزيل الأبحاث الكاملة (Full-Text Paper Scraping)",
+      fulltextScrapingLabel: "تضمين الملخصات المتاحة",
       fulltextScrapingBadge: "خيار اختياري متقدم",
-      fulltextScrapingDesc: "تضمين ملخصات الأبحاث الشاملة في النتائج وملفات التقارير الأكاديمية",
-      fulltextWarningTitle: "تنبيه هام بشأن استهلاك الوقت:",
-      fulltextWarningText: "تنزيل الأبحاث الكاملة يتطلب وقتاً إضافياً (قد يستغرق دقائق بحسب عدد الأبحاث وسرعة خوادم الناشرين).",
-      fulltextQualityBadge: "ضمان الجودة الأكاديمية: تم إلغاء تنزيل واجهات HTML تماماً؛ لن يتم حفظ أي ملف إلا بعد التحقق من كونه ملف PDF أكاديمياً حقيقياً (%PDF).",
-      fulltextDisabledNote: "معطّل افتراضياً لسرعة البحث وتوليد الملخصات والفهارس في ثوانٍ معدودة.",
-      startSearchBtn: "بدء البحث الأكاديمي 🔍",
-      searchingBtn: "جاري البحث...",
-      cancelSearchBtn: "إلغاء البحث",
+      fulltextScrapingDesc: "تضمين الملخصات المتاحة في النتائج وتقرير البحث.",
+      fulltextWarningTitle: "مدة الاسترجاع:",
+      fulltextWarningText: "تتأثر مدة الاسترجاع بعدد السجلات وزمن استجابة المصادر.",
+      fulltextQualityBadge: "تُفحص الملفات المنزلة للتحقق من توقيع PDF.",
+      fulltextDisabledNote: "غير مُفعّل افتراضيًا. ويعتمد توافر الملخصات على بيانات المصدر وصلاحيات الوصول.",
+      startSearchBtn: "بدء البحث في الأدبيات",
+      searchingBtn: "جارٍ استرجاع السجلات…",
+      cancelSearchBtn: "إيقاف البحث",
 
       // Results Section
-      retrievedHeader: "الأبحاث والدراسات المسترجعة",
+      retrievedHeader: "السجلات الببليوغرافية المسترجعة",
       papersRetrievedCount: "بحثاً تم استرجاعها",
       filterAll: "كافة الأبحاث",
-      filterPeer: "أبحاث محكّمة",
-      filterPreprints: "مسودات",
+      filterPeer: "سجلات منشورة",
+      filterPreprints: "مسودات قبل النشر",
       filterOa: "وصول مفتوح",
       filterResultsPlaceholder: "تصفية النتائج الحالية (بالعنوان، المجلة، الباحث، الـ DOI)...",
       downloadResultsZip: "تحميل النتائج (ZIP)",
       viewResultsFile: "عرض الملف",
       directLinkDownload: "↗ رابط مباشر / تحميل",
-      checkingAvailability: "جاري فحص التوفر...",
+      checkingAvailability: "جارٍ فحص التوفر...",
       freeOaDownload: "📥 تحميل مجاني (Open Access)",
       publisherSubscription: "🔒 خاضع لاشتراك الناشر",
       checkFreeAccessBtn: "🔍 فحص التوفر المجاني",
@@ -485,18 +501,18 @@
       noAbstractText: "لا يتوفر ملخص نصي لهذه الدراسة في البيانات الوصفية المفتوحة.",
 
       // Modals
-      abstractModalTitle: "ملخص البحث الأكاديمي",
+      abstractModalTitle: "ملخص المنشور",
       copyAbstractBtn: "📋 نسخ الملخص",
       copyAbstractDone: "✓ تم النسخ",
       modalCloseBtn: "إغلاق",
-      downloadCompleteTitle: "اكتمل استخراج وفهرسة الأبحاث بنجاح",
-      downloadCompleteDesc: "تم إعداد الملف الشامل وتوليد الفهارس الأكاديمية والتوثيقات بنجاح.",
+      downloadCompleteTitle: "اكتمل الاسترجاع وإعداد التقرير",
+      downloadCompleteDesc: "أصبح تقرير البحث متاحًا للمراجعة والتنزيل.",
       downloadPackageBtn: "📥 تنزيل الحزمة الكاملة",
       viewFileBtn: "👁 عرض ملف النتائج",
 
       // History Modal
       historyModalTitle: "سجل عمليات البحث السابقة",
-      historyModalDesc: "سجل المحفوظات السابقة لعمليات البحث والملفات المحملة",
+      historyModalDesc: "سجلات البحث السابقة والتقارير المرتبطة بها",
       clearHistoryBtn: "مسح السجل بالكامل",
       historyEmptyText: "لا توجد عمليات بحث سابقة محفوظة. ستظهر نتائج أبحاثك المكتملة هنا.",
       historyDownloadBtn: "📥 تحميل الملف",
@@ -504,17 +520,17 @@
       historyDeleteBtn: "حذف",
 
       // Settings Modal
-      settingsModalTitle: "إعدادات الباحث ومصادر البحث الأكاديمي",
-      settingsEmailLabel: "البريد الأكاديمي (Polite Pool لـ Crossref و Unpaywall)",
+      settingsModalTitle: "إعدادات الباحث والمصادر",
+      settingsEmailLabel: "البريد الإلكتروني للتواصل ضمن طلبات المصادر",
       settingsElsevierLabel: "مفتاح Scopus / Elsevier API (اختياري)",
       settingsElsevierPlaceholder: "أدخل المفتاح لتفعيل Scopus، أو اتركه فارغاً",
-      settingsElsevierNote: "💡 للوصول المباشر لقاعدة Scopus / ScienceDirect يرجى إدخال المفتاح أعلاه. في حال تركه فارغاً، يعتمد النظام تلقائياً على المستوعبات الأكاديمية التسعة الأخرى بكفاءة تامة.",
-      settingsStatusHeader: "حالة المستوعبات وقواعد البيانات الأكاديمية (10 مستوعبات):",
+      settingsElsevierNote: "يعتمد الوصول إلى Scopus على صلاحيات مفتاح API والحصة المتاحة. ويجري الاستعلام في المصادر المهيأة الأخرى بصورة مستقلة.",
+      settingsStatusHeader: "إتاحة المصادر العلمية",
       statusConnected: "🟢 متصل",
       statusActive: "🟢 نشط",
       statusInactive: "⚪ غير مفعل",
       saveSettingsBtn: "💾 حفظ التغييرات",
-      savingBtn: "جاري الحفظ...",
+      savingBtn: "جارٍ الحفظ...",
 
       // Search Scope & Document Type Filters
       searchScopeLabel: "نطاق البحث الأكاديمي",
@@ -525,30 +541,30 @@
       docTypeAll: "كافة أنواع الوثائق",
       docTypeReview: "مراجعات علمية شاملة (Review Articles)",
       docTypeMetaAnalysis: "تحليلات تجميعية (Meta-Analyses)",
-      docTypeResearch: "أبحاث ومقالات أصيلة (Original Research)",
+      docTypeResearch: "مقالات بحثية",
       docTypeBook: "كتب وفصول كتب (Books & Chapters)",
       docTypeConference: "أوراق مؤتمرات (Conference Papers)",
       filterReviews: "مراجعات علمية",
       filterBooks: "كتب ومراجع",
-      filterResearch: "أبحاث أصيلة",
+      filterResearch: "مقالات بحثية",
       badgeReview: "مراجعة علمية",
       badgeMetaAnalysis: "تحليل تجميعي",
       badgeBook: "كتاب / فصل",
       badgeConference: "ورقة مؤتمر",
-      badgeResearch: "بحث أصيل",
+      badgeResearch: "مقالة بحثية",
 
       // Footer
-      footerTagline: "Knowledge Ocean v1.0 • Canonical Architecture • Multi-Source Scholarly Retrieval",
+      footerTagline: "Knowledge Ocean v1.0 • استرجاع الأدبيات العلمية وتوثيقها",
       footerDownloadLocal: "💻 تنزيل حزمة التشغيل المحلي المستقلة (ZIP)",
 
       // Alerts & Messages
-      alertEnterQuery: "يرجى إدخال كلمة أو مصطلح البحث",
+      alertEnterQuery: "يُرجى إدخال موضوع البحث أو مصطلحاته.",
       alertElsevierGuest: "احفظ مفتاح Elsevier الشخصي من نافذة الدخول لاستخدام Scopus دون تغيير فئة حسابك.",
-      alertSendingRequest: "جاري إرسال الطلب لمحركات البحث الأكاديمية...",
-      alertSearchStarted: "بدأت عملية المسح والتجميع والتدقيق المتوازي...",
-      alertServerOffline: "تعذر الاتصال بالخادم — تأكد من تشغيل السيرفر",
+      alertSendingRequest: "جارٍ إرسال الاستعلام إلى المصادر العلمية…",
+      alertSearchStarted: "بدأ استرجاع السجلات الببليوغرافية.",
+      alertServerOffline: "تعذّر الاتصال بالخادم. يُرجى المحاولة لاحقًا.",
       alertSearchCancelled: "تم إلغاء عملية البحث",
-      alertSearchFailed: "فشلت عملية البحث",
+      alertSearchFailed: "تعذّر استكمال البحث.",
       alertCopySuccess: "تم النسخ بنجاح"
     }
   };
@@ -597,13 +613,13 @@
       return m.replace('اكتمل الاستخراج بنجاح!', 'Extraction completed successfully!')
               .replace('تم إعداد ملف الأبحاث', 'Research package generated')
               .replace('تم العثور على', 'Found')
-              .replace('بحث محكّم', 'peer-reviewed')
+              .replace('بحث محكّم', 'published records')
               .replace('مسودة', 'preprints');
     }
     if (m.includes('تم إيقاف البحث بنجاح') || m.includes('Search stopped successfully')) {
       return m.replace('تم إيقاف البحث بنجاح!', 'Search stopped successfully!')
               .replace('تم إعداد ملف الأبحاث بما تم جمعه', 'Document generated with collected papers')
-              .replace('بحث محكّم', 'peer-reviewed')
+              .replace('بحث محكّم', 'published records')
               .replace('مسودة', 'preprints');
     }
     if (m.includes('تم إيقاف البحث — جاري الآن')) {
@@ -613,7 +629,7 @@
       return m.replace('تم إيقاف البحث بناءً على طلبك', 'Search stopped upon your request')
               .replace('وحفظ', 'and saved')
               .replace('بنجاح!', 'successfully!')
-              .replace('بحث محكّم', 'peer-reviewed')
+              .replace('بحث محكّم', 'published records')
               .replace('مسودة', 'preprints');
     }
     if (m.includes('ضغط') && m.includes('ZIP')) {
@@ -867,7 +883,7 @@
     const [isSearching, setIsSearching] = useState(false);
     const [taskId, setTaskId] = useState(null);
     const [progress, setProgress] = useState(0);
-    const [statusMsg, setStatusMsg] = useState(() => (lang === "ar" ? "جاري التهيئة..." : "Initializing..."));
+    const [statusMsg, setStatusMsg] = useState(() => (lang === "ar" ? "جارٍ التهيئة..." : "Initializing..."));
     const [counts, setCounts] = useState(null);
 
     const [downloadUrl, setDownloadUrl] = useState("#");
@@ -905,6 +921,7 @@
     const [titleInput, setTitleInput] = useState("");
     const [titleLoading, setTitleLoading] = useState(false);
     const [titleResults, setTitleResults] = useState([]);
+    const [titleSearchOutcome, setTitleSearchOutcome] = useState(null);
     const [copiedTitleDoiLink, setCopiedTitleDoiLink] = useState(null);
     const [copiedTitleApa, setCopiedTitleApa] = useState(null);
     const [copiedDoiUrlId, setCopiedDoiUrlId] = useState(null);
@@ -1207,13 +1224,14 @@
           showAlert(lang === "ar" ? "تم استرجاع بيانات معرّف الـ DOI بنجاح" : "DOI metadata retrieved successfully", "info", 2500);
         }
       } catch (err) {
-        showAlert(lang === "ar" ? "تعذّر الاتصال بالسيرفر لفحص معرّف الـ DOI" : "Server connection failed for DOI lookup", "error");
+        showAlert(lang === "ar" ? "تعذّر الاتصال بالخادم لاسترجاع بيانات معرّف DOI" : "Server connection failed for DOI lookup", "error");
       } finally {
         setDoiLoading(false);
       }
     };
 
     const handleTitleFindDoi = async (overrideTitle) => {
+      if (titleLoading) return;
       let target = (overrideTitle || titleInput || "").trim();
       if (!target) {
         const el = document.getElementById("title_input_field") || document.querySelector("input[placeholder*='Refractory']");
@@ -1225,6 +1243,7 @@
       }
       setTitleLoading(true);
       setTitleResults([]);
+      setTitleSearchOutcome(null);
       setCopiedTitleDoiLink(null);
       setCopiedTitleApa(null);
 
@@ -1242,17 +1261,16 @@
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {
-          showAlert(data.error || (lang === "ar" ? "تعذّر البحث عن معرّف الـ DOI بالعنوان" : "Unable to find DOI by title"), "error");
+          setTitleSearchOutcome({ kind: "error" });
+          showAlert(lang === "ar" ? "تعذّر استكمال البحث بالعنوان. يرجى مراجعة المدخلات أو المحاولة لاحقًا." : "The title search could not be completed. Review the input or try again later.", "error");
         } else {
-          setTitleResults(data.results || []);
-          if ((data.results || []).length === 0) {
-            showAlert(lang === "ar" ? "لم يتم العثور على أبحاث مطابقة للعنوان المدخل" : "No matching papers found for this title", "info", 3000);
-          } else {
-            showAlert(lang === "ar" ? `تم العثور على ${data.results.length} أبحاث مطابقة بنجاح` : `Found ${data.results.length} matching papers`, "info", 2500);
-          }
+          const eligibleResults = (data.results || []).filter(item => Number(item.similarity) >= 50);
+          setTitleResults(eligibleResults);
+          setTitleSearchOutcome({ kind: eligibleResults.length ? "results" : (data.scan_complete === false ? "incomplete" : "empty"), incomplete: data.scan_complete === false });
         }
       } catch (err) {
-        showAlert(lang === "ar" ? "تعذّر الاتصال بالسيرفر للبحث بالعنوان" : "Server connection failed for title search", "error");
+        setTitleSearchOutcome({ kind: "error" });
+        showAlert(lang === "ar" ? "تعذّر الاتصال بالخادم لاستكمال البحث بالعنوان." : "The server could not be reached to complete the title search.", "error");
       } finally {
         setTitleLoading(false);
       }
@@ -1286,7 +1304,7 @@
     const loadHistory = async (silent = false) => {
       setLoadingHistory(true);
       if (!silent) {
-        showAlert(lang === "ar" ? "جاري استرجاع الحزم من السجل..." : "Retrieving packages from history...", "info", 2000);
+        showAlert(lang === "ar" ? "جارٍ استرجاع الحزم من السجل..." : "Retrieving packages from history...", "info", 2000);
       }
 
       if (isFileProtocol) {
@@ -1416,7 +1434,7 @@
           showAlert(resData.error || resData.detail || (lang === "ar" ? "فشل مسح الملف" : "Failed to delete file"), "error");
         }
       } catch (err) {
-        showAlert((lang === "ar" ? "تعذر الاتصال بالسيرفر لمسح الملف: " : "Server connection failed to delete file: ") + err.message, "error");
+        showAlert((lang === "ar" ? "تعذر الاتصال بالخادم لمسح الملف: " : "Server connection failed to delete file: ") + err.message, "error");
       }
     };
 
@@ -1455,8 +1473,8 @@
             setSavePath(data.save_path || data.local_path || "");
             const isStopped = Boolean(data.counts?.stopped);
             const doneTitleText = isStopped
-              ? (lang === "ar" ? `تم الإيقاف — ${data.counts?.peer || 0} بحث محكّم و ${data.counts?.preprints || 0} مسودة` : `Stopped — ${data.counts?.peer || 0} peer-reviewed & ${data.counts?.preprints || 0} preprints`)
-              : (lang === "ar" ? `اكتمل — ${data.counts?.peer || 0} بحث محكّم و ${data.counts?.preprints || 0} مسودة` : `Completed — ${data.counts?.peer || 0} peer-reviewed & ${data.counts?.preprints || 0} preprints`);
+              ? (lang === "ar" ? `تم الإيقاف — ${data.counts?.peer || 0} سجل منشور و ${data.counts?.preprints || 0} مسودة` : `Stopped — ${data.counts?.peer || 0} published records;  ${data.counts?.preprints || 0} preprints`)
+              : (lang === "ar" ? `اكتمل — ${data.counts?.peer || 0} سجل منشور و ${data.counts?.preprints || 0} مسودة` : `Completed — ${data.counts?.peer || 0} published records;  ${data.counts?.preprints || 0} preprints`);
             setDoneTitle(doneTitleText);
 
             // Store retrieved papers for live browser
@@ -1524,7 +1542,7 @@
           if (act.query) setQuery(act.query);
           if (act.mode) setMode(act.mode);
           setProgress(act.progress || 10);
-          setStatusMsg(localizeTaskMessage(act.message || (lang === "ar" ? "جاري استكمال ومتابعة البحث..." : "Resuming search progress..."), lang));
+          setStatusMsg(localizeTaskMessage(act.message || (lang === "ar" ? "جارٍ استكمال ومتابعة البحث..." : "Resuming search progress..."), lang));
           pollTaskStatus(act.task_id);
           showAlert(
             lang === "ar"
@@ -1556,7 +1574,7 @@
       setShowDownloadPanel(false);
       setResultsPapers([]);
       setProgress(5);
-      setStatusMsg(lang === "ar" ? "جاري إرسال الطلب لمحركات البحث الأكاديمية..." : "Sending request to academic search engines...");
+      setStatusMsg(lang === "ar" ? "جارٍ إرسال الطلب لمحركات البحث الأكاديمية..." : "Sending request to academic search engines...");
 
       const form = new FormData();
       form.append("password", password.trim());
@@ -1602,7 +1620,7 @@
         setStatusMsg(lang === "ar" ? "بدأت عملية المسح والتجميع والتدقيق المتوازي..." : "Parallel search, aggregation, and verification started...");
         pollTaskStatus(tid);
       } catch (err) {
-        showAlert(lang === "ar" ? "تعذر الاتصال بالخادم — تأكد من تشغيل السيرفر" : "Unable to connect to server — please verify backend is running", "error");
+        showAlert(lang === "ar" ? "تعذر الاتصال بالخادم — تأكد من تشغيل الخادم" : "Unable to connect to server — please verify backend is running", "error");
         setIsSearching(false);
       }
     };
@@ -1816,7 +1834,7 @@
                   onClick=${handleLogout}
                   className="h-9 sm:h-10 px-2.5 sm:px-3.5 rounded-[12px] sm:rounded-[14px] border border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300 text-[11px] sm:text-[12px] font-bold cursor-pointer disabled:opacity-50 shrink-0"
                 >
-                  <span className="hidden sm:inline">${logoutLoading ? (lang === "ar" ? "جاري الخروج..." : "Signing out...") : (lang === "ar" ? "تسجيل الخروج" : "Log Out")}</span>
+                  <span className="hidden sm:inline">${logoutLoading ? (lang === "ar" ? "جارٍ الخروج..." : "Signing out...") : (lang === "ar" ? "تسجيل الخروج" : "Log Out")}</span>
                   <span className="sm:hidden">${logoutLoading ? "..." : (lang === "ar" ? "خروج" : "Exit")}</span>
                 </button>
               ` : null}
@@ -2141,7 +2159,7 @@
                             <div className="flex items-center justify-between flex-wrap gap-2">
                               <div className="text-[12px] font-black text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
                                 <span>📜</span>
-                                <span>${lang === "ar" ? "توثيق APA 7th القياسي الصارم (جاهز للنسخ إلى Microsoft Word):" : "Strict APA 7th Citation (Ready to paste into Word):"}</span>
+                                <span>${lang === "ar" ? "الاستشهاد المرجعي وفق APA 7:" : "APA 7 reference:"}</span>
                               </div>
 
                               <button
@@ -2292,7 +2310,7 @@
                   <div className="space-y-6">
                     <div>
                       <label className="text-[13px] font-bold opacity-80 mb-2 block">
-                        ${lang === "ar" ? "أدخل عنوان البحث العلمي كاملاً أو جزءاً منه لإيجاد معرّف DOI المطابق" : "Enter full or partial paper title to find matching DOI"}
+                        ${t.titleInputLabel}
                       </label>
                       <div className="flex gap-2.5 flex-col sm:flex-row">
                         <div className="relative flex-1">
@@ -2302,7 +2320,7 @@
                             value=${titleInput}
                             onChange=${(e) => setTitleInput(e.target.value)}
                             onKeyDown=${(e) => { if (e.key === "Enter") handleTitleFindDoi(); }}
-                            placeholder=${lang === "ar" ? "مثال: Refractory high anion gap metabolic acidosis due to chronic paracetamol..." : "e.g. Refractory high anion gap metabolic acidosis due to chronic paracetamol..."}
+                            placeholder=${t.titleInputPlaceholder}
                             className="w-full h-[50px] rounded-[14px] border border-stone-200 dark:border-white/15 bg-white/70 dark:bg-black/30 px-4 text-[14px] outline-none focus:border-blue-500 transition"
                             dir="ltr"
                           />
@@ -2313,12 +2331,12 @@
                           disabled=${titleLoading}
                           className="h-[50px] px-6 rounded-[14px] bg-blue-600 hover:bg-blue-700 text-white font-bold text-[13px] transition flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 shrink-0"
                         >
-                          <span>${titleLoading ? (lang === "ar" ? "جاري البحث..." : "Searching...") : (lang === "ar" ? "استخراج الـ DOI بالعنوان 🎯" : "Match Title to DOI 🎯")}</span>
+                          <span>${titleLoading ? t.titleFindLoading : t.titleFindBtn}</span>
                         </button>
                       </div>
 
                       <div className="mt-3 flex items-center gap-2 flex-wrap">
-                        <span className="text-[11px] opacity-60 font-bold">${lang === "ar" ? "أمثلة عناوين للتجربة:" : "Sample titles to try:"}</span>
+                        <span className="text-[11px] opacity-60 font-bold">${lang === "ar" ? "أمثلة على عناوين المنشورات:" : "Example publication titles:"}</span>
                         <button
                           type="button"
                           onClick=${() => {
@@ -2346,10 +2364,21 @@
                       </div>
                     </div>
 
+                    <p className="text-[12px] opacity-75">${t.titleMinMatchNote}</p>
+                    ${titleLoading || titleSearchOutcome ? html`
+                      <div role="status" aria-live="polite" className="rounded-[12px] border border-stone-200 dark:border-white/10 p-4 text-[13px] leading-relaxed">
+                        ${titleLoading ? t.titleScanning :
+                          titleSearchOutcome.kind === "empty" ? t.titleNoMatch :
+                          titleSearchOutcome.kind === "incomplete" ? t.titleScanIncomplete :
+                          titleSearchOutcome.kind === "error" ? t.titleSearchFailed :
+                          titleSearchOutcome.incomplete ? t.titlePartialWarning : t.titleScanComplete}
+                      </div>
+                    ` : null}
+
                     ${titleResults && titleResults.length > 0 ? html`
                       <div className="space-y-4 animate-fade-in">
                         <div className="text-[14px] font-black text-stone-900 dark:text-stone-100 flex items-center gap-2">
-                          <span>${lang === "ar" ? "الأبحاث المطابقة المستخرجة:" : "Matching papers found:"}</span>
+                          <span>${t.titleMatchHeader}</span>
                           <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 font-bold">
                             ${titleResults.length} ${lang === "ar" ? "نتائج" : "results"}
                           </span>
@@ -2369,7 +2398,7 @@
                                     ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300"
                                     : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300"
                                 }`}>
-                                  ${item.similarity >= 95 ? "✨ " : ""}${lang === "ar" ? `نسبة تطابق العنوان: ${item.similarity}%` : `Title Match Confidence: ${item.similarity}%`}
+                                  ${lang === "ar" ? `نسبة تشابه العنوان: ${item.similarity}%` : `Title similarity: ${item.similarity}%`}
                                 </span>
 
                                 <div className="text-[11px] opacity-60 font-mono">
@@ -2640,7 +2669,7 @@
 
                   <!-- Query Example Chips -->
                   <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[11px] opacity-60 font-bold">${lang === "ar" ? "أمثلة سريعة:" : "Quick Examples:"}</span>
+                    <span className="text-[11px] opacity-60 font-bold">${lang === "ar" ? "أمثلة على الاستعلامات:" : "Example queries:"}</span>
                     ${exampleQueries.map((ex, i) => html`
                       <button
                         key=${i}
@@ -2956,10 +2985,10 @@
                   >
                     ${isSearching ? html`
                       <span className="flex items-center gap-2">
-                        <span className="animate-spin text-lg">◌</span> ${lang === "ar" ? "جاري المعالجة والمسح المتوازي..." : "Processing & Parallel Searching..."}
+                        <span className="animate-spin text-lg">◌</span> ${lang === "ar" ? "جارٍ استرجاع السجلات من المصادر العلمية…" : "Retrieving records from academic sources…"}
                       </span>
                     ` : html`
-                      <span>${lang === "ar" ? "إطلاق البحث الذكي المتوازي ↗ (Ctrl + Enter)" : "Launch Smart Parallel Search ↗ (Ctrl + Enter)"}</span>
+                      <span>${lang === "ar" ? "بدء البحث في الأدبيات (Ctrl + Enter)" : "Start literature search (Ctrl + Enter)"}</span>
                     `}
                   </button>
                 </div>
@@ -3004,7 +3033,7 @@
                       </div>
                       ${counts ? html`
                         <span className="text-[11px] px-2.5 py-1 rounded-full bg-emerald-200/60 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200 font-bold">
-                          ${lang === "ar" ? `محكّم: ${counts.peer} • مسودات: ${counts.preprints} • دفعات: ${counts.batches}` : `Peer-Reviewed: ${counts.peer} • Preprints: ${counts.preprints} • Batches: ${counts.batches}`}
+                          ${lang === "ar" ? `سجلات منشورة: ${counts.peer} • مسودات: ${counts.preprints} • دفعات: ${counts.batches}` : `Published records: ${counts.peer} • Preprints: ${counts.preprints} • Batches: ${counts.batches}`}
                         </span>
                       ` : null}
                     </div>
@@ -3071,13 +3100,13 @@
                   <div className="flex items-center justify-between flex-wrap gap-3 pb-5 border-b border-stone-200/70 dark:border-white/10">
                     <div>
                       <h3 className="text-[18px] font-black flex items-center gap-2">
-                        <span>📚 ${lang === "ar" ? "مستعرض الأوراق البحثية المستخرجة" : "Retrieved Papers Explorer"}</span>
+                        <span>📚 ${t.retrievedHeader}</span>
                         <span className="text-[12px] px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 font-bold font-sans">
                           ${filteredPapers.length} / ${resultsPapers.length}
                         </span>
                       </h3>
                       <p className="text-[12px] opacity-70 mt-1">
-                        ${includeAbstracts ? (lang === "ar" ? "يمكنك قراءة الملخصات، فتح الروابط مباشرة، ونسخ الاقتباسات (APA / BibTeX) بنقرة زر" : "Read abstracts, open direct links, and copy citations (APA / BibTeX) with a single click.") : (lang === "ar" ? "استعراض بيانات الأوراق وفحص الروابط المباشرة ونسخ الاقتباسات (APA / BibTeX)" : "Explore paper metadata, open direct links, and copy citations (APA / BibTeX).")}
+                        ${includeAbstracts ? (lang === "ar" ? "قراءة الملخصات المتاحة، وفتح روابط المصادر، ونسخ المراجع وفق APA أو BibTeX." : "Review available abstracts, open source links, and copy references in APA or BibTeX format.") : (lang === "ar" ? "استعراض بيانات الأوراق وفحص الروابط المباشرة ونسخ الاقتباسات (APA / BibTeX)" : "Review publication metadata, access source links, and copy references (APA / BibTeX).")}
                       </p>
                     </div>
 
@@ -3095,7 +3124,7 @@
                         onClick=${() => setPaperFilter("peer")}
                         className=${`px-3 py-1.5 rounded-[10px] transition ${paperFilter === "peer" ? "bg-white dark:bg-stone-800 text-emerald-600 dark:text-emerald-400 shadow-sm" : "opacity-70 hover:opacity-100"}`}
                       >
-                        ${lang === "ar" ? "محكّمة" : "Peer-Reviewed"} (${resultsPapers.filter(p => !p.is_preprint).length})
+                        ${t.filterPeer} (${resultsPapers.filter(p => !p.is_preprint).length})
                       </button>
                       <button
                         type="button"
@@ -3468,7 +3497,7 @@
                   disabled=${loadingHistory}
                   className="text-[12px] px-3.5 py-1.5 rounded-full bg-stone-900 text-white dark:bg-white dark:text-black font-bold hover:opacity-90 transition disabled:opacity-50 shadow-sm cursor-pointer"
                 >
-                  ${loadingHistory ? (lang === "ar" ? "جاري..." : "Loading...") : (lang === "ar" ? "تحديث ◫" : "Refresh ◫")}
+                  ${loadingHistory ? (lang === "ar" ? "جارٍ..." : "Loading...") : (lang === "ar" ? "تحديث ◫" : "Refresh ◫")}
                 </button>
               </div>
 
@@ -3556,10 +3585,10 @@
                   </div>
                   <div>
                     <h3 className="text-[17px] sm:text-[20px] font-black text-stone-900 dark:text-stone-100">
-                      ${lang === "ar" ? "دليل الاستخدام الشامل وميزات منصة محيط المعرفة" : "Comprehensive User Guide & Platform Architecture"}
+                      ${lang === "ar" ? "دليل الاستخدام وخصائص المنصة" : "User guide and platform features"}
                     </h3>
                     <p className="text-[12px] sm:text-[13px] opacity-75 mt-0.5">
-                      ${lang === "ar" ? "شرح تفصيلي لكافة أدوات البحث والاسترجاع، الفلاتر الذكية، خيارات التقارير، وسياسة الخصوصية الأكاديمية الصارمة." : "In-depth reference for search engines, intelligent filters, citation exports, reports, and privacy policies."}
+                      ${lang === "ar" ? "إرشادات استخدام أدوات الاسترجاع، ومرشحات البحث، والتقارير، وسياسة حفظ البيانات." : "Guidance on retrieval, search filters, reference export, reports, and data retention."}
                     </p>
                   </div>
                 </div>
@@ -3591,12 +3620,12 @@
                 <div className="rounded-[18px] border border-stone-200/80 dark:border-white/10 bg-stone-50/70 dark:bg-white/[0.03] p-4 sm:p-5 space-y-2">
                   <div className="font-black text-[13.5px] text-blue-700 dark:text-blue-400 flex items-center gap-2">
                     <span className="text-base">🔍</span>
-                    <span>${lang === "ar" ? "1. محاور وطرق البحث العلمي الذكي" : "1. Smart Search Modes & Query Logic"}</span>
+                    <span>${lang === "ar" ? "1. أنماط البحث وبناء الاستعلام" : "1. Search modes and query construction"}</span>
                   </div>
                   <p className="opacity-85 text-stone-700 dark:text-stone-300 whitespace-pre-line">
                     ${lang === "ar"
-                      ? "• بحث الكلمات المفتاحية: يدعم المعاملات المنطقية (AND, OR, NOT) والأقواس لحصر العلاقات بدقة، وعلامات التنصيص («...») للبحث عن عبارات مركبة متطابقة.\n• بحث المؤلفين: استرجاع كافة الأوراق المنشورة لباحث محدد من مختلف المستودعات والمجلات العالمية.\n• مطابقة العبارة التامة: مطابقة حرفية غير مجزأة لسلسلة الكلمات المدخلة.\n• التكامل مع الـ DOI: إمكانية فحص أي معرف رقمي مباشرة أو استخراجه من عنوان الدراسة."
-                      : "• Keyword Search: Full Boolean syntax (AND, OR, NOT), parentheses grouping, and quotes ('...') for exact phrases.\n• Author Search: Retrieve all publications by a specific scholar across global databases.\n• Exact Phrase: Strict verbatim match for complex scientific terminology.\n• DOI Integration: Direct DOI resolution or title-to-DOI extraction with one click."
+                      ? "• بحث الكلمات المفتاحية: يدعم المعاملات المنطقية (AND, OR, NOT) والأقواس لحصر العلاقات بدقة، وعلامات التنصيص («...») للبحث عن عبارات مركبة متطابقة.\n• بحث المؤلفين: استرجاع سجلات منشورات المؤلف من المصادر المتاحة.\n• مطابقة العبارة التامة: مطابقة حرفية غير مجزأة لسلسلة الكلمات المدخلة.\n• التكامل مع الـ DOI: إمكانية فحص أي معرف رقمي مباشرة أو استخراجه من عنوان الدراسة."
+                      : "• Keyword Search: Full Boolean syntax (AND, OR, NOT), parentheses grouping, and quotes ('...') for exact phrases.\n• Author Search: Retrieve an author’s publication records from available sources.\n• Exact Phrase: Strict verbatim match for complex scientific terminology.\n• DOI Integration: Direct DOI resolution or title-to-DOI extraction with one click."
                     }
                   </p>
                 </div>
@@ -3609,7 +3638,7 @@
                   </div>
                   <p className="opacity-85 text-stone-700 dark:text-stone-300 whitespace-pre-line">
                     ${lang === "ar"
-                      ? "• مُفعّل (ON): يُلزم محرك البحث بوجود كلماتك صراحةً في عنوان الورقة العلمية (Title)، ويستبعد أي دراسة ذُكرت كلماتها في الملخص فقط. يضيق نطاق الاسترجاع، وقد يقل عدد النتائج تبعاً للمصادر والمرشحات والمهلة المتاحة.\n• غير مُفعّل (OFF - الافتراضي): بحث استكشافي شامل يبحث في العناوين والملخصات معاً لضمان عدم تفويت أي دراسة قيّمة ذات صلة، مع ترتيب الأوراق المتطابقة في العنوان أولاً."
+                      ? "• مُفعّل (ON): يُلزم محرك البحث بوجود كلماتك صراحةً في عنوان الورقة العلمية (Title)، ويستبعد أي دراسة ذُكرت كلماتها في الملخص فقط. يضيق نطاق الاسترجاع، وقد يقل عدد النتائج تبعاً للمصادر والمرشحات والمهلة المتاحة.\n• غير مُفعّل (OFF - الافتراضي): بحث استكشافي شامل يبحث في العناوين والملخصات معاً مع ترتيب السجلات المطابقة في العنوان أولًا، بحسب تغطية المصادر والبيانات المتاحة."
                       : "• ON: Excludes any paper whose title lacks the exact keywords under strict matching; the returned count depends on source coverage, filters, and the available time budget.\n• OFF (Default): Comprehensive discovery across both titles and abstracts, automatically prioritizing title matches at the top of results."
                     }
                   </p>
@@ -3623,7 +3652,7 @@
                   </div>
                   <p className="opacity-85 text-stone-700 dark:text-stone-300 whitespace-pre-line">
                     ${lang === "ar"
-                      ? "• بحث قياسي (زر الملخصات معطل): يستهلك نقطة واحدة لكل بحث لجلب العناوين والمؤلفين والمجلات وروابط المعرفات والوصول المفتوح فورياً.\n• تفعيل زر الملخصات: يستهلك نقطتين لكل بحث لجلب الملخص الكامل (Abstract) وتضمينه في النتائج وتقرير الـ PDF.\n• الحصص: 50 رصيداً يومياً للضيوف و250 رصيداً لصاحب رمز الوصول؛ وتُعتمد الحصة المعروضة أعلى الصفحة."
+                      ? "• بحث قياسي (زر الملخصات معطل): يستهلك نقطة واحدة لكل بحث لجلب العناوين والمؤلفين والمجلات وروابط المعرّفات والوصول المفتوح المتاحة.\n• تفعيل زر الملخصات: يستهلك نقطتين لكل بحث لجلب الملخص الكامل (Abstract) وتضمينه في النتائج وتقرير الـ PDF.\n• الحصص: 50 رصيداً يومياً للضيوف و250 رصيداً لصاحب رمز الوصول؛ وتُعتمد الحصة المعروضة أعلى الصفحة."
                       : "• Standard Search (Toggle OFF): 1 credit per search for swift metadata, author lists, and DOI links.\n• Include Abstracts (Toggle ON): 2 credits per search (2x rate) to extract complete abstracts into results and PDF dossiers.\n• Quotas: 50 daily credits for guests and 250 for Access Code holders; the current allowance appears in the page header."
                     }
                   </p>
@@ -3633,12 +3662,12 @@
                 <div className="rounded-[18px] border border-stone-200/80 dark:border-white/10 bg-stone-50/70 dark:bg-white/[0.03] p-4 sm:p-5 space-y-2">
                   <div className="font-black text-[13.5px] text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
                     <span className="text-base">📄</span>
-                    <span>${lang === "ar" ? "4. تقارير الـ PDF والميزات الحصرية" : "4. PDF Dossiers & Exclusive Features"}</span>
+                    <span>${lang === "ar" ? "4. تقارير البحث بصيغة PDF" : "4. PDF search reports"}</span>
                   </div>
                   <p className="opacity-85 text-stone-700 dark:text-stone-300 whitespace-pre-line">
                     ${lang === "ar"
-                      ? "• تقرير موحد شامل: تجميع كافة الأبحاث وملخصاتها وفهارسها وروابطها في ملف PDF واحد متناسق وأنيق.\n• صفحة جديدة لكل بحث: عند استخراج الأبحاث بالملخصات لحاملي الرمز، يبدأ كل بحث في صفحة جديدة مستقلة لقراءة وطباعة أكاديمية مريحة.\n• الحفظ الفوري عند الإيقاف: عند الضغط على زر «إيقاف البحث»، يقوم النظام فوراً بإنتاج ملف الـ PDF متضمناً كافة الأبحاث المجمعة حتى لحظة الإيقاف دون أي فقدان للنتائج."
-                      : "• Single Unified Dossier: All papers, abstracts, indices, and links consolidated into a single polished PDF document.\n• New Page per Abstract: For authorized keys, each paper in abstract mode starts on a fresh page for comfortable reading and printing.\n• Graceful Stop & Save: Stopping a search immediately produces the PDF report containing all collected papers up to that exact moment."
+                      ? "• تقرير موحد: تجميع السجلات المسترجعة وملخصاتها المتاحة وروابطها في ملف PDF.\n• صفحة جديدة لكل بحث: عند استخراج الأبحاث بالملخصات لحاملي الرمز، يبدأ كل بحث في صفحة جديدة مستقلة لقراءة وطباعة أكاديمية مريحة.\n• حفظ النتائج عند الإيقاف: يتوقف جمع السجلات وتُعد النتائج المسترجعة حتى تلك اللحظة للتنزيل."
+                      : "• Search report: Retrieved records, available abstracts, and source links are consolidated into a PDF document.\n• New Page per Abstract: For authorized keys, each paper in abstract mode starts on a fresh page for comfortable reading and printing.\n• Stop and retain results: Stopping collection prepares the records already retrieved for download."
                     }
                   </p>
                 </div>
@@ -3651,8 +3680,8 @@
                   </div>
                   <p className="opacity-85 text-stone-700 dark:text-stone-300 whitespace-pre-line">
                     ${lang === "ar"
-                      ? "• فحص معرّف DOI المباشر: فحص واسترجاع البيانات الوصفية الرسمية، وسنة النشر، والمجلة، وروابط التحميل المفتوح لأي معرّف رقمي معتمد.\n• استخراج المعرّف من العنوان: إدخال عنوان أي مقال أو ورقة علمية لمطابقتها في السجلات العالمية واستخراج الـ DOI الرسمي ورابط الوصول لها بدقة متناهية."
-                      : "• Direct DOI Lookup: Instant verification of DOIs with official metadata, journal details, publication year, and direct OA links.\n• Title to DOI Matching: Input partial or full paper titles to discover their registered DOI and verified academic source."
+                      ? "• فحص معرّف DOI المباشر: فحص واسترجاع البيانات الوصفية الرسمية، وسنة النشر، والمجلة، وروابط التحميل المفتوح لأي معرّف رقمي معتمد.\n• استخراج المعرّف من العنوان: إدخال عنوان أي مقال أو ورقة علمية لمطابقتها في السجلات العالمية واستخراج الـ DOI الرسمي ورابط الوصول لها وفق البيانات المتاحة."
+                      : "• DOI lookup: Retrieve publication metadata, journal details, publication year, and available access links.\n• Title to DOI Matching: Input partial or full paper titles to discover their registered DOI and verified academic source."
                     }
                   </p>
                 </div>
@@ -3927,7 +3956,7 @@
                 </div>
                 <div>
                   <h3 className="text-[18px] font-black leading-tight">${lang === "ar" ? "مرحباً بك في محيط المعرفة" : "Welcome to Knowledge Ocean"}</h3>
-                  <p className="text-[12px] opacity-75 font-medium mt-0.5">${lang === "ar" ? "منصة الاسترجاع والتوثيق الأكاديمي فائق الدقة (إعدادات الباحث)" : "High-Precision Academic Retrieval & Documentation System (Researcher Setup)"}</p>
+                  <p className="text-[12px] opacity-75 font-medium mt-0.5">${lang === "ar" ? "إعدادات الباحث واسترجاع المصادر العلمية" : "Researcher settings and academic source retrieval"}</p>
                 </div>
               </div>
 
@@ -4003,7 +4032,7 @@
                   onClick=${() => saveSettings(settingsEmail, settingsElsevierKey, true)}
                   className="px-6 py-2.5 rounded-[12px] bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-2"
                 >
-                  ${settingsSaving ? (lang === "ar" ? "جاري الحفظ..." : "Saving...") : (lang === "ar" ? "💾 حفظ الإعدادات ومتابعة" : "💾 Save & Continue")}
+                  ${settingsSaving ? (lang === "ar" ? "جارٍ الحفظ..." : "Saving...") : (lang === "ar" ? "💾 حفظ الإعدادات ومتابعة" : "💾 Save & Continue")}
                 </button>
               </div>
             </div>
@@ -4201,7 +4230,7 @@
                       </div>
                       <p className="text-xs opacity-85 mt-1 leading-relaxed">
                         ${quota.isVip
-                          ? (lang === "ar" ? "تتمتع بصلاحية وصول مفتوحة بالكامل بدون أي قيود يومية على عدد الأبحاث والملخصات." : "Full unlimited downloads and abstracts with zero daily caps.")
+                          ? (lang === "ar" ? "يتيح هذا الحساب استرجاع السجلات والملخصات دون حد يومي محلي، وفق إتاحة المصادر وصلاحيات الوصول." : "This account has no local daily retrieval limit; source availability and access permissions still apply.")
                           : (lang === "ar" ? `رصيدك اليومي المتبقي: ${quota.remaining} من 250 بحثاً (يتجدد يومياً عند 12:00 ص بتوقيت بغداد).` : `Remaining daily quota: ${quota.remaining} of 250 searches (Renews at 12:00 AM Baghdad time).`)}
                       </p>
                       <button
@@ -4224,7 +4253,7 @@
                       <span>${lang === "ar" ? "مفتاح VIP الأكاديمي" : "Academic VIP Key"}</span>
                     </div>
                     <div className="opacity-75 text-[11px] mt-1">
-                      ${lang === "ar" ? "استخراج شامل وغير محدود للأبحاث والملخصات وقواعد Scopus." : "Unlimited downloads, full abstracts, and Scopus access."}
+                      ${lang === "ar" ? "استرجاع السجلات والملخصات وفق إتاحة المصادر وصلاحيات الحساب." : "Record and abstract retrieval subject to source availability and account permissions."}
                     </div>
                   </div>
                   <div className="p-3 rounded-[14px] border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-black/30">
@@ -4242,7 +4271,7 @@
                 <div className="p-3 rounded-[14px] bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
                   <span className="text-base shrink-0">🛡️</span>
                   <div className="leading-relaxed">
-                    <span className="font-bold">${lang === "ar" ? "حماية ضد التخمين الآلي:" : "Anti-Bot Brute Force Protection:"} </span>
+                    <span className="font-bold">${lang === "ar" ? "حماية الوصول:" : "Access protection:"} </span>
                     <span className="opacity-90">
                       ${lang === "ar" ? "يتم حظر عنوان IP تلقائياً لمدة 24 ساعة عند إدخال 5 محاولات خاطئة متتالية." : "IP address is banned automatically for 24 hours after 5 consecutive failed attempts."}
                     </span>
@@ -4355,7 +4384,7 @@
                   onClick=${() => handleLogin()}
                   className="px-6 py-2.5 rounded-[12px] bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-2"
                 >
-                  ${loginLoading ? (lang === "ar" ? "جاري التحقق..." : "Verifying...") : (lang === "ar" ? "🔑 تسجيل الدخول / تفعيل" : "🔑 Sign In / Activate")}
+                  ${loginLoading ? (lang === "ar" ? "جارٍ التحقق..." : "Verifying...") : (lang === "ar" ? "🔑 تسجيل الدخول / تفعيل" : "🔑 Sign In / Activate")}
                 </button>
               </div>
             </div>
@@ -4390,7 +4419,7 @@
           </div>
 
           <div className="text-[11px] opacity-60 font-medium pt-1">
-            Knowledge Ocean v1.0 • Canonical Architecture • Multi-Source Scholarly Retrieval
+            ${t.footerTagline}
           </div>
         </footer>
       </div>

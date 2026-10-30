@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const root = path.resolve(__dirname, '..');
 
-async function check(language, success) {
+async function check(language, success, titleMode = null) {
   const states = [];
   let cursor = 0, component, tree, calls = 0, copied = null;
   const context = vm.createContext({
@@ -17,6 +17,15 @@ async function check(language, success) {
     window: { location: { protocol: 'https:', hostname: 'example.hf.space' } },
     fetch: async (url, options) => {
       calls++;
+      if (titleMode) {
+        assert.equal(url, '/api/find-doi');
+        assert.equal(options.body.get('title'), 'Climate research');
+        return { ok: true, json: async () => ({ ok: true, scan_complete: titleMode !== 'partial', results: titleMode === 'matches' ? [
+          {title:'Below threshold',similarity:49.99,doi:'10.1000/low'},
+          {title:'Boundary match',similarity:50,doi:'10.1000/boundary'},
+          {title:'Strong match',similarity:90,doi:'10.1000/strong'}
+        ] : [] }) };
+      }
       assert.equal(url, '/api/doi-lookup');
       assert.equal(options.body.get('doi'), '10.1000/example');
       return { ok: success, json: async () => success ? {
@@ -65,10 +74,30 @@ async function check(language, success) {
   const hub = nodes(tree).find(n => n.type === 'button' && text(n).includes(language === 'ar' ? 'منظومة توثيق' : 'DOI & Citation Resolver'));
   assert.ok(hub, 'DOI navigation is present');
   hub.props.onClick(); render();
+  if (titleMode) {
+    const tab = nodes(tree).find(n => n.type === 'button' && text(n).includes(language === 'ar' ? 'استخراج المعرّف من العنوان' : 'Match Title to DOI'));
+    tab.props.onClick(); render();
+    nodes(tree).find(n => n.props?.id === 'title_input_field').props.onChange({target:{value:'Climate research'}}); render();
+    const search = nodes(tree).find(n => n.type === 'button' && text(n) === (language === 'ar' ? 'البحث بالعنوان' : 'Search by title'));
+    await search.props.onClick(); render();
+    const status = nodes(tree).find(n => n.props?.role === 'status');
+    assert.ok(status, 'Completion notice remains visible');
+    if (titleMode === 'matches') {
+      assert.ok(!text(tree).includes('Below threshold'));
+      assert.ok(text(tree).includes('Boundary match'));
+      assert.ok(text(tree).includes('Strong match'));
+    } else if (titleMode === 'partial') {
+      assert.ok(text(status).includes(language === 'ar' ? 'تعذّر استكمال' : 'could not be completed'));
+    } else {
+      assert.ok(text(status).includes(language === 'ar' ? 'اكتملت استعلامات' : 'queries are complete'));
+      assert.ok(text(status).includes('50%'));
+    }
+    return;
+  }
   const input = nodes(tree).find(n => n.props?.id === 'doi_input_field');
   assert.ok(input, 'DOI input is present');
   input.props.onChange({ target: { value: '10.1000/example' } }); render();
-  const lookup = nodes(tree).find(n => n.type === 'button' && text(n).includes(language === 'ar' ? 'فحص واسترجاع المعرف' : 'Lookup & Verify'));
+  const lookup = nodes(tree).find(n => n.type === 'button' && text(n).includes(language === 'ar' ? 'استرجاع بيانات المعرّف' : 'Retrieve DOI metadata'));
   await lookup.props.onClick(); render();
   assert.equal(calls, 1);
   assert.ok(nodes(tree).some(n => n.props?.id === 'doi_input_field'), 'The app stays mounted');
@@ -105,6 +134,7 @@ async function check(language, success) {
   for (const language of ['en', 'ar']) {
     await check(language, true);
     await check(language, false);
+    for (const mode of ['matches', 'empty', 'partial']) await check(language, true, mode);
   }
   console.log('DOI success and failure views render in Arabic and English.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
