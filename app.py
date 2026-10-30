@@ -70,6 +70,8 @@ from network import (
     ELSEVIER_API_KEY, CORE_API_KEY
 )
 from providers import FETCH_BATCH_MAP, extract_crossref_authors, extract_crossref_year
+from abstracts import enrich_abstracts, normalize_abstract
+from report_builder import ReportBuilder
 from database import (
     init_db, db_set_task, db_get_task, db_check_rate_limit,
     db_get_remaining_quota, db_reset_quota, db_refund_quota,
@@ -464,7 +466,23 @@ class AcademicPDF(FPDF):
                 self.ln(2)
                 continue
             a = align or ("R" if has_arabic(para) else "L")
-            self.multi_cell(0, h, rtl(para), align=a, new_x="LMARGIN", new_y="NEXT")
+            if has_arabic(para):
+                # Wrap logical words first, then shape each visual line. Shaping
+                # a whole long paragraph first reverses its reading sequence
+                # when multi_cell subsequently wraps that visual string.
+                width = self.w - self.l_margin - self.r_margin - 2 * self.c_margin
+                line = ""
+                for word in para.split():
+                    candidate = f"{line} {word}".strip()
+                    if line and self.get_string_width(rtl(candidate)) > width:
+                        self.multi_cell(0, h, rtl(line), align=a, new_x="LMARGIN", new_y="NEXT")
+                        line = word
+                    else:
+                        line = candidate
+                if line:
+                    self.multi_cell(0, h, rtl(line), align=a, new_x="LMARGIN", new_y="NEXT")
+            else:
+                self.multi_cell(0, h, para, align=a, new_x="LMARGIN", new_y="NEXT")
         self.set_text_color(0, 0, 0)
 
     def field(self, label, value, value_color=(0, 0, 0), link=None):
@@ -481,6 +499,21 @@ class AcademicPDF(FPDF):
             # Align L keeps the value directly adjacent to the label, even when containing shaped Arabic
             self.multi_cell(0, 6, rtl(val), align="L", new_x="LMARGIN", new_y="NEXT")
         self.set_text_color(0, 0, 0)
+
+
+def partition_report_papers(papers):
+    """One pass: dictionary membership comparisons made large indexes quadratic."""
+    reviews, books, research, preprints = [], [], [], []
+    for paper in papers:
+        if paper.get('doc_partition') == 'review' or paper.get('doc_type') in ('review', 'meta_analysis'):
+            reviews.append(paper)
+        elif paper.get('doc_partition') == 'book' or paper.get('doc_type') == 'book':
+            books.append(paper)
+        elif paper.get('is_preprint'):
+            preprints.append(paper)
+        else:
+            research.append(paper)
+    return reviews, books, research, preprints
 
 
 def generate_documents(query, papers, pdf_path, md_path=None, db_source="all", doc_type="Peer-Reviewed", is_guest=False, include_abstracts=True, is_other=False):
@@ -509,10 +542,7 @@ def generate_documents(query, papers, pdf_path, md_path=None, db_source="all", d
     years = [int(p['year']) for p in papers if str(p.get('year', '')).isdigit() and p['year'] != "0000"]
     
     # Partition papers into Reviews, Books, Research Articles, and Preprints
-    review_papers = [p for p in papers if p.get('doc_partition') == 'review' or p.get('doc_type') in ('review', 'meta_analysis')]
-    book_papers = [p for p in papers if p.get('doc_partition') == 'book' or p.get('doc_type') == 'book']
-    research_papers = [p for p in papers if p not in review_papers and p not in book_papers and not p.get('is_preprint')]
-    preprint_papers = [p for p in papers if p.get('is_preprint') and p not in review_papers and p not in book_papers]
+    review_papers, book_papers, research_papers, preprint_papers = partition_report_papers(papers)
 
     # Chronologically sort papers inside each section from newest to oldest
     def _sort_by_year_desc(p):
@@ -736,6 +766,8 @@ def generate_documents(query, papers, pdf_path, md_path=None, db_source="all", d
                 pdf.field("Open Access URL", p['oa_url'][:100], value_color=(0, 120, 0), link=p['oa_url'])
 
             abstract_text = (p.get('abstract') or '').strip()
+            if abstract_text == "No abstract provided in source metadata.":
+                abstract_text = ""
             if include_abstracts and abstract_text:
                 pdf.ln(2.5)
                 pdf.write_block("ABSTRACT", size=10.5, style="B", color=(40, 40, 150))
@@ -755,10 +787,7 @@ def generate_all_papers_index(query, papers, pdf_path, title_prefix=""):
         return (0, -int(y), -int(p.get('citation_count') or 0)) if (y.isdigit() and len(y) == 4 and y != "0000") else (1, 0, -int(p.get('citation_count') or 0))
 
     # Partition papers into Reviews, Books, Research Articles, and Preprints
-    rev_p = [p for p in papers if p.get('doc_partition') == 'review' or p.get('doc_type') in ('review', 'meta_analysis')]
-    book_p = [p for p in papers if p.get('doc_partition') == 'book' or p.get('doc_type') == 'book']
-    res_p = [p for p in papers if p not in rev_p and p not in book_p and not p.get('is_preprint')]
-    pre_p = [p for p in papers if p.get('is_preprint') and p not in rev_p and p not in book_p]
+    rev_p, book_p, res_p, pre_p = partition_report_papers(papers)
 
     rev_p.sort(key=_year_desc_key)
     book_p.sort(key=_year_desc_key)
@@ -896,14 +925,14 @@ def build_zip(zip_path, file_paths, task_id=""):
     real = [p for p in file_paths if (isinstance(p, tuple) and os.path.exists(p[0])) or (isinstance(p, str) and os.path.exists(p))]
     if not real:
         return None
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=1, allowZip64=True) as zf:
         for p in real:
             if task_id and task_id in CANCELLED_TASKS:
                 break
             if isinstance(p, tuple):
-                zf.write(p[0], arcname=p[1])
+                zf.write(p[0], arcname=p[1], compress_type=zipfile.ZIP_STORED if p[0].lower().endswith('.pdf') else zipfile.ZIP_DEFLATED)
             else:
-                zf.write(p, arcname=os.path.basename(p))
+                zf.write(p, arcname=os.path.basename(p), compress_type=zipfile.ZIP_STORED if p.lower().endswith('.pdf') else zipfile.ZIP_DEFLATED)
     if task_id and task_id in CANCELLED_TASKS:
         if os.path.exists(zip_path):
             try:
@@ -1130,6 +1159,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
     if "is_vip" in kwargs:
         is_guest = not bool(kwargs["is_vip"])
     quota_refunded = 0
+    report_builder = None
     try:
         _check_cancelled(task_id)
         _set_task(task_id, status="processing", progress=15, message="بدء مسح وتدقيق الأبحاث عبر المحركات الأكاديمية...")
@@ -1217,7 +1247,11 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         round_no = 0
         comprehensive_search = bool(kwargs.get("comprehensive_search", False) or unlimited)
         budget = SearchBudget(target_limit, comprehensive=comprehensive_search and not is_exact_doi)
-        _set_task(task_id, _search_deadline=budget.deadline,
+        abstract_attempts = set()
+        abstract_imported = 0
+        if comprehensive_search and not is_guest:
+            report_builder = ReportBuilder(user_space, query, f"{safe_query}_{ts}", db_source=db_source, include_abstracts=with_abstracts, is_other=is_other)
+        _set_task(task_id, phase="collecting", _search_deadline=budget.deadline,
                   search_budget_seconds=budget.total_seconds, search_idle_seconds=budget.IDLE_SECONDS)
         finish_reason = "sources_exhausted"
         def provider_in_cooldown(name):
@@ -1318,10 +1352,10 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                                 else:
                                     txt_entry += "    Abstract: [No abstract provided in source metadata]\n\n"
                                 txt_file.write(txt_entry)
-                                txt_file.flush()
 
                                 if (len(paper_index) >= target_limit and not is_exact_doi) or task_id in CANCELLED_TASKS:
                                     break
+                            txt_file.flush()
                         except Exception as e:
                             provider_diagnostics[eng_name] = {"status": "error", "error_type": type(e).__name__}
                             log.exception("Engine %s batch error in task %s", eng_name, task_id)
@@ -1341,6 +1375,15 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                 finally:
                     executor.shutdown(wait=False, cancel_futures=True)
 
+                if with_abstracts and task_id not in CANCELLED_TASKS and budget.remaining() > 0:
+                    # Enrichment runs inside the collection budget, never as an
+                    # unbounded serial tail after collection has finished.
+                    abstract_imported += enrich_abstracts(paper_index.get_all(), task_id, is_guest, min(budget.deadline, time.monotonic() + 8), abstract_attempts)
+                if report_builder is not None and task_id not in CANCELLED_TASKS:
+                    report_builder.prepare(paper_index.get_all())
+                _set_task(task_id, collected_count=len(paper_index),
+                          reports_prepared=sum(part["future"].done() and not part["future"].exception() for part in report_builder.prepared) if report_builder else 0)
+
                 if task_id in CANCELLED_TASKS:
                     finish_reason = "cancelled"
                     log.info(f"Task {task_id} cancellation detected after batch. Exiting search loop with {len(paper_index)} papers.")
@@ -1355,7 +1398,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                 _set_task(task_id, progress=pct, message=f"تم جمع وتدقيق {len(paper_index)}{goal} بحث...", _search_deadline=budget.deadline)
 
         provider_warnings = [info["warning"] for info in provider_diagnostics.values() if info.get("warning")]
-        _set_task(task_id, provider_diagnostics=provider_diagnostics, provider_warnings=provider_warnings, finish_reason=finish_reason)
+        _set_task(task_id, provider_diagnostics=provider_diagnostics, provider_warnings=provider_warnings, finish_reason=finish_reason, abstracts_imported=abstract_imported)
         all_canonical = paper_index.get_all()
         if not all_canonical:
             if task_id in CANCELLED_TASKS:
@@ -1472,7 +1515,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         pdf_files = []
         is_stopped = bool(task_id in CANCELLED_TASKS)
         status_prefix = "تم إيقاف البحث — " if is_stopped else ""
-        _set_task(task_id, progress=85, message=f"{status_prefix}تم فرز {len(final_papers)} بحث — جاري توليد ملفات PDF...")
+        _set_task(task_id, phase="reporting", progress=85, message=f"{status_prefix}تم فرز {len(final_papers)} بحث — جاري توليد ملفات PDF...")
 
         if is_guest:
             _set_task(task_id, progress=90, message=f"{status_prefix}جاري إعداد وتنسيق ملف الأبحاث بصيغة PDF ({len(final_papers)} بحث)...")
@@ -1516,6 +1559,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
 
             comp_msg = f"تم إيقاف البحث بنجاح! تم إعداد ملف الأبحاث بما تم جمعه ({len(peer)} بحث محكّم، {len(preprints)} مسودة)" if is_stopped else f"اكتمل الاستخراج بنجاح! تم إعداد ملف الأبحاث ({len(peer)} بحث محكّم، {len(preprints)} مسودة)"
             _set_task(task_id, status="completed", progress=100,
+                      phase="completed",
                       message=comp_msg,
                       papers=final_papers,
                       include_abstracts=with_abstracts,
@@ -1538,37 +1582,16 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                       counts={"peer": len(peer), "preprints": len(preprints), "batches": 1, "unlimited": False, "stopped": is_stopped})
             return
 
-        if peer:
-            chunks = [peer[i:i+500] for i in range(0, len(peer), 500)] if unlimited or len(peer) > 500 else [peer]
-            for idx, chunk in enumerate(chunks, start=1):
-                pdf_p = os.path.join(user_space, f"{idx:02d}_{safe_query}_{ts}_PeerReviewed.pdf")
-                try:
-                    generate_documents(query, chunk, pdf_p, None, db_source, "Peer-Reviewed", is_guest=is_guest, include_abstracts=with_abstracts, is_other=is_other)
-                    pdf_files.append(pdf_p)
-                except Exception as e:
-                    log.warning(f"chunk peer {idx} failed: {e}")
-            try:
-                all_peer_pdf = os.path.join(user_space, f"INDEX_PeerReviewed_{safe_query}_{ts}.pdf")
-                generate_all_papers_index(query, peer, all_peer_pdf, title_prefix="(Peer-Reviewed)")
-                pdf_files.append(all_peer_pdf)
-            except Exception as e:
-                log.warning(f"ALL peer failed: {e}")
+        if report_builder is None:
+            report_builder = ReportBuilder(user_space, query, f"{safe_query}_{ts}", db_source=db_source, include_abstracts=with_abstracts, is_other=is_other)
 
-        if preprints:
-            chunks_pre = [preprints[i:i+500] for i in range(0, len(preprints), 500)] if unlimited or len(preprints) > 500 else [preprints]
-            for idx, chunk in enumerate(chunks_pre, start=1):
-                pdf_p = os.path.join(user_space, f"{idx:02d}_{safe_query}_{ts}_Preprints.pdf")
-                try:
-                    generate_documents(query, chunk, pdf_p, None, db_source, "Preprint", is_guest=is_guest, include_abstracts=with_abstracts, is_other=is_other)
-                    pdf_files.append(pdf_p)
-                except Exception as e:
-                    log.warning(f"chunk preprint {idx} failed: {e}")
-            try:
-                all_pre_pdf = os.path.join(user_space, f"INDEX_Preprints_{safe_query}_{ts}.pdf")
-                generate_all_papers_index(query, preprints, all_pre_pdf, title_prefix="(Preprints)")
-                pdf_files.append(all_pre_pdf)
-            except Exception as e:
-                log.warning(f"ALL preprint failed: {e}")
+        def report_progress(done, total):
+            _set_task(task_id, phase="reporting", progress=85 + int(9 * done / max(1, total)),
+                      report_progress={"completed": done, "total": total},
+                      message=f"إعداد ملفات التقرير على الخادم: {done} من {total} / Preparing report files on the server: {done} of {total}")
+
+        generated, report_parts = report_builder.finish(final_canonical, report_progress)
+        pdf_files.extend(generated)
 
         if os.path.exists(txt_path):
             pdf_files.append(txt_path)
@@ -1663,7 +1686,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                   guest_fp=guest_fp,
                   guest_token=guest_token,
                   is_guest=is_guest,
-                  counts={"peer": len(peer), "preprints": len(preprints), "batches": len(pdf_files), "unlimited": unlimited, "stopped": is_stopped})
+                  phase="completed",
+                  report_parts=report_parts,
+                  counts={"peer": len(peer), "preprints": len(preprints), "batches": len(report_parts), "unlimited": unlimited, "stopped": is_stopped})
     except Exception as e:
         log.error(f"Task {task_id} failed: {e}")
         is_cancelled = (task_id in CANCELLED_TASKS) or ("إلغاء" in str(e))
@@ -1692,6 +1717,8 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
                       pdf_url="", pdf_zip="", md_url="", md_zip="",
                       save_path="", local_path="", file_path="")
     finally:
+        if report_builder is not None:
+            report_builder.close()
         if task_id in CANCELLED_TASKS:
             CANCELLED_TASKS.discard(task_id)
 
@@ -2162,7 +2189,7 @@ async def cancel_task(task_id: str, request: Request):
     if curr_status == "error":
         return {"status": "error", "task_id": task_id, "preserved": False}
 
-    has_papers = bool(task.get("papers"))
+    has_papers = bool(task.get("papers") or task.get("collected_count"))
     if curr_status == "queued" or in_q or not has_papers:
         _set_task(task_id, status="error", progress=100,
                   message="تم إلغاء البحث بناءً على طلبك.",
@@ -2185,12 +2212,16 @@ async def cancel_task(task_id: str, request: Request):
 async def get_status(task_id: str, request: Request):
     with TASKS_LOCK:
         task = TASKS.get(task_id)
+        if task is not None:
+            task = dict(task)
     if task is None:
         task = db_get_task(task_id)
     if task is None:
         raise HTTPException(404, "المهمة غير موجودة.")
     require_owner(request, task.get("user_hash", ""), local=is_local_instance(request))
-    return task
+    # Large result sets must not serialize on the event loop serving health,
+    # cancellation and progress requests from other users.
+    return await run_in_threadpool(JSONResponse, task)
 
 @app.api_route("/api/doi-lookup", methods=["GET", "POST"])
 async def api_doi_lookup(request: Request, doi: str = Form(None), password: str = Form(None)):
@@ -2570,6 +2601,7 @@ async def api_doi_lookup(request: Request, doi: str = Form(None), password: str 
     paper_data["peer_review_status"] = "محكم (Peer-Reviewed)" if not paper_data["is_preprint"] else "غير محكم / مسودة (Preprint / Unreviewed)"
     paper_data["peer_review_status_en"] = "Peer-Reviewed" if not paper_data["is_preprint"] else "Preprint / Unreviewed"
 
+    paper_data["abstract"] = normalize_abstract(paper_data.get("abstract"))
     return JSONResponse({"ok": True, "paper": paper_data})
 
 

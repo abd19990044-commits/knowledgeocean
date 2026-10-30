@@ -49,6 +49,7 @@ jobs:
           paths = [
               "Dockerfile", ".dockerignore",
               "app.py", "access_control.py", "citations.py", "config_loader.py",
+              "abstracts.py", "report_builder.py",
               "database.py", "dedup.py", "download_research.py", "identifiers.py",
               "models.py", "network.py", "providers.py", "query_parser.py",
               "ranking.py", "scholarly_registry.py",

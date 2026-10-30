@@ -241,7 +241,7 @@ def generate_bibtex_entry(paper: dict, index: int = 1) -> str:
     
     abstract = paper.get('abstract') or ''
     if abstract and abstract != "No abstract provided in source metadata.":
-        clean_abs = escape_bibtex_text(re.sub(r'[\r\n\t]+', ' ', abstract)[:600]).replace('{', '').replace('}', '')
+        clean_abs = escape_bibtex_text(re.sub(r'[\r\n\t]+', ' ', abstract)).replace('{', '').replace('}', '')
         entry.append(f"  abstract  = {{{clean_abs}}}")
     
     if entry[-1].endswith(','): entry[-1] = entry[-1][:-1]
@@ -285,7 +285,7 @@ def generate_ris_entry(paper: dict) -> str:
         lines.append(f"UR  - {paper['oa_url']}")
     abstract = paper.get('abstract') or ''
     if abstract and abstract != "No abstract provided in source metadata.":
-        clean_abs = re.sub(r'[\r\n\t]+', ' ', abstract)[:600]
+        clean_abs = re.sub(r'[\r\n\t]+', ' ', abstract)
         lines.append(f"AB  - {clean_abs}")
     lines.append("ER  -")
     return "\n".join(lines)

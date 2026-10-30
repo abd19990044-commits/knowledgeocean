@@ -11,6 +11,7 @@ import html
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Set, Any
 from identifiers import normalize_doi
+from abstracts import normalize_abstract, MISSING_ABSTRACT
 
 SOURCE_FIELD_CONFIDENCE = {
     'doi': {'crossref': 1.0, 'pubmed': 1.0, 'europepmc': 0.95, 'openalex': 0.95, 'semanticscholar': 0.90},
@@ -23,7 +24,7 @@ def evaluate_abstract_quality(text: Optional[str]) -> float:
     """Computes an objective quality score (0.0 - 1.0) for an abstract."""
     if not text:
         return 0.0
-    t = text.strip()
+    t = normalize_abstract(text)
     if t.lower() in ("no abstract provided in source metadata.", "null", "none", "") or len(t) < 25:
         return 0.0
     
@@ -428,8 +429,7 @@ class CanonicalPaper:
             self.citation_count = self.citations
         if self.doi:
             self.doi = normalize_doi(self.doi)
-        if not self.abstract or len(self.abstract.strip()) < 15:
-            self.abstract = "No abstract provided in source metadata."
+        self.abstract = normalize_abstract(self.abstract) or MISSING_ABSTRACT
         if self.pdf_url and self.pdf_url not in self.pdf_urls:
             self.pdf_urls.append(self.pdf_url)
         if self.oa_url and self.oa_url not in self.pdf_urls:
@@ -498,7 +498,7 @@ class CanonicalPaper:
 
     @property
     def has_substantive_abstract(self) -> bool:
-        return bool(self.abstract and self.abstract != "No abstract provided in source metadata." and len(self.abstract.strip()) >= 30)
+        return bool(len(normalize_abstract(self.abstract)) >= 30)
 
     def merge(self, incoming: 'CanonicalPaper') -> None:
         """

@@ -574,6 +574,9 @@
     if (!msg || typeof msg !== 'string') {
       return targetLang === 'ar' ? 'جاري المعالجة...' : 'Processing...';
     }
+    if (msg.includes(' / Preparing report files on the server:')) {
+      return msg.split(' / ')[targetLang === 'ar' ? 0 : 1];
+    }
     if (targetLang === 'ar') return msg;
 
     let m = msg.trim();
@@ -904,6 +907,8 @@
     const [resultsPapers, setResultsPapers] = useState([]);
     const [paperFilter, setPaperFilter] = useState("all"); // 'all', 'peer', 'preprints', 'oa'
     const [resultsQuery, setResultsQuery] = useState("");
+    const [resultsPage, setResultsPage] = useState(1);
+    useEffect(() => { setResultsPage(1); setExpandedAbstracts({}); }, [resultsPapers, paperFilter, resultsQuery]);
     const [expandedAbstracts, setExpandedAbstracts] = useState({});
     const [copiedCiteId, setCopiedCiteId] = useState(null);
     const [cardAccessMap, setCardAccessMap] = useState({});
@@ -1395,6 +1400,7 @@
 
         setQuery(sData.query || item.query || "");
         setResultsPapers(sData.papers || []);
+        setIncludeAbstracts(Boolean(sData.with_abstracts || sData.include_abstracts));
         setDownloadUrl(sData.download_url || item.download_url || "");
         setSavePath(sData.save_path || item.save_path || "");
         setFileType(sData.file_type || item.file_type || "zip");
@@ -1721,6 +1727,13 @@
       }
       return list;
     }, [resultsPapers, paperFilter, resultsQuery]);
+
+    // A scroll container still mounts every card. Render one page at a time
+    // so comprehensive result sets cannot freeze the browser.
+    const resultPageCount = Math.max(1, Math.ceil(filteredPapers.length / 50));
+    const currentResultsPage = Math.min(resultsPage, resultPageCount);
+    const resultsPageStart = (currentResultsPage - 1) * 50;
+    const visibleResultPapers = filteredPapers.slice(resultsPageStart, resultsPageStart + 50);
 
     // Example search terms chips
     const exampleQueries = [
@@ -2189,7 +2202,7 @@
                         ${doiResult.abstract ? html`
                           <div className="pt-2 border-t border-stone-200/50 dark:border-white/5">
                             <div className="text-[12px] font-bold opacity-80 mb-1">${lang === "ar" ? "ملخص البحث (Abstract):" : "Paper Abstract:"}</div>
-                            <p className=${`text-[13px] leading-relaxed text-stone-700 dark:text-stone-300 ${!doiAbstractExpanded ? "line-clamp-3" : ""}`} dir="ltr">
+                            <p className=${`text-[13px] leading-relaxed whitespace-pre-line text-stone-700 dark:text-stone-300 ${!doiAbstractExpanded ? "line-clamp-3" : ""}`} dir="auto">
                               ${doiResult.abstract}
                             </p>
                             <button
@@ -3175,13 +3188,21 @@
                     />
                   </div>
 
+                  ${resultPageCount > 1 ? html`
+                    <nav aria-label=${lang === "ar" ? "صفحات نتائج البحث" : "Search result pages"} className="flex items-center justify-between gap-3 py-3 text-[12px]">
+                      <button type="button" disabled=${currentResultsPage <= 1} onClick=${() => setResultsPage(currentResultsPage - 1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">${lang === "ar" ? "السابق" : "Previous"}</button>
+                      <span role="status">${lang === "ar" ? `الصفحة ${currentResultsPage} من ${resultPageCount} — السجلات ${resultsPageStart + 1}–${Math.min(resultsPageStart + 50, filteredPapers.length)} من ${filteredPapers.length}` : `Page ${currentResultsPage} of ${resultPageCount} — records ${resultsPageStart + 1}–${Math.min(resultsPageStart + 50, filteredPapers.length)} of ${filteredPapers.length}`}</span>
+                      <button type="button" disabled=${currentResultsPage >= resultPageCount} onClick=${() => setResultsPage(currentResultsPage + 1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">${lang === "ar" ? "التالي" : "Next"}</button>
+                    </nav>
+                  ` : null}
                   <!-- Cards List -->
-                  <div className="mt-4 space-y-4 max-h-[700px] overflow-y-auto pr-1">
+                  <div key=${`${currentResultsPage}-${paperFilter}-${resultsQuery}`} className="mt-4 space-y-4 max-h-[700px] overflow-y-auto pr-1">
                     ${filteredPapers.length === 0 ? html`
                       <div className="py-12 text-center opacity-60 text-[14px]">
                         ${lang === "ar" ? "لا توجد نتائج تطابق معايير التصفية المحددة." : "No results match the specified filter criteria."}
                       </div>
-                    ` : filteredPapers.map((paper, idx) => {
+                    ` : visibleResultPapers.map((paper, pageIdx) => {
+                      const idx = resultsPageStart + pageIdx;
                       const isExpanded = !!expandedAbstracts[idx];
                       const isPreprint = !!paper.is_preprint;
                       const hasOA = !!(paper.is_oa || paper.oa_url || paper.pdf_url);
@@ -3283,7 +3304,7 @@
                           ${includeAbstracts ? (
                             (paper.abstract && paper.abstract.trim() && paper.abstract !== "No abstract provided in source metadata.") ? html`
                               <div className="pt-1">
-                                <p className=${`text-[12px] leading-relaxed text-stone-700 dark:text-stone-300 ${!isExpanded ? "line-clamp-2" : ""}`} dir="ltr">
+                                <p className=${`text-[12px] leading-relaxed whitespace-pre-line text-stone-700 dark:text-stone-300 ${!isExpanded ? "line-clamp-2" : ""}`} dir="auto">
                                   ${paper.abstract}
                                 </p>
                                 <div className="flex items-center gap-3 mt-1.5 flex-wrap">
@@ -3863,7 +3884,7 @@
                   ` : null}
                 </div>
 
-                <div className="rounded-[16px] bg-stone-50 dark:bg-black/40 border border-stone-200/80 dark:border-white/10 p-5 text-left" dir="ltr">
+                <div className="rounded-[16px] bg-stone-50 dark:bg-black/40 border border-stone-200/80 dark:border-white/10 p-5 text-start" dir="auto">
                   ${abstractModalPaper.abstract && abstractModalPaper.abstract !== "No abstract provided in source metadata." ? html`
                     <p className="text-[13px] leading-relaxed text-stone-800 dark:text-stone-200 whitespace-pre-wrap font-sans">
                       ${abstractModalPaper.abstract}
