@@ -3760,12 +3760,8 @@
 
               </div>
 
-              <!-- 3. Mobile Optimization & Shortcuts Footer -->
-              <div className="pt-4 border-t border-stone-200/60 dark:border-white/10 flex items-center justify-between flex-wrap gap-2 text-[11.5px] opacity-80 font-medium">
-                <div className="flex items-center gap-2">
-                  <span>📱</span>
-                  <span>${lang === "ar" ? "المنصة مُحسّنة بالكامل لجميع شاشات الهواتف الذكية والأجهزة اللوحية والمكتبية" : "Fully responsive and optimized for mobile phones, tablets, and desktops"}</span>
-                </div>
+              <!-- Keyboard shortcuts -->
+              <div className="pt-4 border-t border-stone-200/60 dark:border-white/10 flex items-center flex-wrap gap-2 text-[12px] text-stone-700 dark:text-stone-300 font-medium">
                 <div className="flex items-center gap-2 font-mono">
                   <span>⌨️</span>
                   <span>${lang === "ar" ? "Ctrl + Enter: للبحث الفوري | Esc: لإغلاق النوافذ" : "Ctrl + Enter: Quick Search | Esc: Close Modals"}</span>
@@ -4467,33 +4463,33 @@
         ` : null}
 
         <!-- Footer -->
-        <footer className="mx-auto max-w-[1440px] px-8 py-10 text-center space-y-3 font-sans">
-          <div dir="ltr" className="text-[13px] font-bold text-stone-800 dark:text-stone-200 tracking-wide">
+        <footer className="mx-auto mb-6 w-[94%] max-w-[1440px] rounded-[20px] border border-stone-200 bg-white/95 px-6 py-8 text-center space-y-3 font-sans text-stone-800 shadow-lg dark:border-white/15 dark:bg-[#141210]/95 dark:text-stone-100">
+          <div dir="ltr" className="text-[14px] font-bold text-stone-900 dark:text-stone-100 tracking-wide">
             Developed by ABDULSALAM <span className="mx-1">S.</span> HASAN
           </div>
 
           <!-- Telegram Error Reporting Button & Link -->
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-            <span className="text-xs text-stone-600 dark:text-stone-400 font-medium">
+            <span className="text-[13px] text-stone-700 dark:text-stone-200 font-medium">
               ${lang === "ar" ? "أبلغ عن أي أخطاء في الموقع على تلكرام:" : "Report any website errors on Telegram:"}
             </span>
             <a
               href="https://t.me/knowledgeocean123_bot"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#229ED9]/15 hover:bg-[#229ED9]/25 text-[#229ED9] dark:text-[#38bdf8] border border-[#229ED9]/30 hover:border-[#229ED9]/60 transition-all duration-200 text-xs font-bold shadow-sm group cursor-pointer"
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-50 hover:bg-sky-100 text-sky-800 dark:bg-sky-950 dark:hover:bg-sky-900 dark:text-sky-200 border border-sky-300 dark:border-sky-700 transition-all duration-200 text-[13px] font-bold shadow-sm group cursor-pointer"
               title=${lang === "ar" ? "تواصل على تلكرام للإبلاغ عن أي خطأ أو مشكلة في الموقع" : "Contact on Telegram to report website bugs"}
             >
-              <svg className="w-4 h-4 text-[#229ED9] dark:text-[#38bdf8] fill-current group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 fill-current group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.19-.08-.05-.19-.02-.27 0-.12.03-1.99 1.27-5.62 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.05-.49-.83-.27-1.49-.42-1.43-.88.03-.24.38-.49 1.03-.75 4.04-1.76 6.74-2.92 8.09-3.48 3.85-1.6 4.65-1.88 5.17-1.89.11 0 .37.03.54.17.14.12.18.28.2.45-.02.07-.02.13-.03.22z"/>
               </svg>
-              <span dir="ltr" className="tracking-wide font-mono font-bold underline decoration-[#229ED9]/40 group-hover:decoration-[#229ED9]">
+              <span dir="ltr" className="tracking-wide font-mono font-bold underline decoration-current">
                 @knowledgeocean123_bot
               </span>
             </a>
           </div>
 
-          <div className="text-[11px] opacity-60 font-medium pt-1">
+          <div className="text-[12px] text-stone-700 dark:text-stone-300 font-medium pt-1">
             ${t.footerTagline}
           </div>
         </footer>
