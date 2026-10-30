@@ -2125,7 +2125,7 @@
 
                             <div
                               className="text-[15px] leading-relaxed text-stone-900 dark:text-stone-100 select-all p-3 rounded-[10px] bg-white/80 dark:bg-stone-900/70 border border-purple-100 dark:border-purple-900/40"
-                              style="font-family: 'Times New Roman', Times, serif; font-size: 14pt;"
+                              style=${{ fontFamily: "'Times New Roman', Times, serif", fontSize: "14pt" }}
                               dir="ltr"
                               dangerouslySetInnerHTML=${{
                                 __html: doiResult.apa_html || apaToHtmlFormatted(doiResult.apa)
