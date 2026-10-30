@@ -714,36 +714,26 @@ def generate_documents(query, papers, pdf_path, md_path=None, db_source="all", d
         pdf.ln(6)
 
         for p in grp_items:
-            is_separate_page = bool(include_abstracts and (is_other or not is_guest))
-            if is_separate_page:
-                pdf.add_page()
-            else:
-                if pdf.get_y() > (pdf.h - 55):
-                    pdf.add_page()
-                    if FONT_BOLD:
-                        pdf.set_font("Amiri", "B", 11)
-                    pdf.set_text_color(*grp_color)
-                    pdf.cell(0, 7, f"{grp_en}   ·   {rtl(grp_ar)}", new_x="LMARGIN", new_y="NEXT", align="L")
-                    pdf.set_text_color(0, 0, 0)
-                    pdf.ln(3)
+            # Each detailed record starts on a fresh page in every report mode.
+            pdf.add_page()
 
             doc_lbl_en = p.get('doc_type_label') or "Original Research"
             doc_lbl_ar = p.get('doc_type_label_ar') or "بحث علمي أصيل"
 
             pdf.set_fill_color(242, 244, 252)
             if FONT_REGULAR:
-                pdf.set_font("Amiri", "B", 10 if is_separate_page else 9)
+                pdf.set_font("Amiri", "B", 10)
             pdf.set_text_color(grp_color[0], grp_color[1], grp_color[2])
             sec_tag = grp_en.split(':')[0].strip()
             badge_card_str = f"ITEM {global_idx} OF {total_records}   ·   [{sec_tag}: {doc_lbl_en.upper()}  |  {rtl(doc_lbl_ar)}]"
-            pdf.cell(0, 8.5 if is_separate_page else 7.5, badge_card_str, fill=True, new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 8.5, badge_card_str, fill=True, new_x="LMARGIN", new_y="NEXT")
             pdf.set_text_color(0, 0, 0)
             pdf.ln(2)
 
             raw_t = p.get('title') or 'No Title'
             clean_t = re.sub(r'<[^>]+>', ' ', raw_t).strip()
             clean_t = re.sub(r'\s+', ' ', clean_t) or 'No Title'
-            pdf.write_block(clean_t, size=12.5 if is_separate_page else 11.5, style="B")
+            pdf.write_block(clean_t, size=12.5, style="B")
             pdf.ln(1)
 
             clean_auths = [a.strip() for a in p.get('authors', []) if a and a.strip() and a.strip().lower() not in ("unknown", "unknown authors", "et al", "et al.")]
