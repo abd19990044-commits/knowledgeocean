@@ -29,7 +29,7 @@ import threading
 import hmac
 import unicodedata
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 import shlex
 import difflib
 import urllib.parse
@@ -1328,7 +1328,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
 
                         if task_id in CANCELLED_TASKS:
                             break
-                except TimeoutError:
+                except FuturesTimeoutError:
                     pending = [name for future, name in futures.items() if not future.done()]
                     for name in pending:
                         provider_diagnostics[name] = {"status": "timeout"}
@@ -3185,7 +3185,7 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                                     existing["pages"] = item["pages"]
                     except Exception:
                         source_states[futures[fut]] = "unavailable"
-            except TimeoutError:
+            except FuturesTimeoutError:
                 for future, source in futures.items():
                     if source_states[source] == "pending":
                         source_states[source] = "timed_out"
