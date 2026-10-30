@@ -7,9 +7,10 @@ const root = path.resolve(__dirname, '..');
 
 async function check(language, success) {
   const states = [];
-  let cursor = 0, component, tree, calls = 0;
+  let cursor = 0, component, tree, calls = 0, copied = null;
   const context = vm.createContext({
     console, FormData, URL, Uint8Array,
+    navigator: { clipboard: { writeText: async value => { copied = value; } } },
     setTimeout: () => 0, clearTimeout() {},
     localStorage: { getItem: key => key === 'knowledge_ocean_lang' ? language : null, setItem() {}, removeItem() {} },
     document: { getElementById: id => id === 'root' ? {} : null },
@@ -76,6 +77,27 @@ async function check(language, success) {
     const citation = nodes(tree).find(n => n.props?.dangerouslySetInnerHTML?.__html?.includes('Test Journal'));
     assert.ok(citation, 'Formatted citation renders');
     assert.equal(citation.props.style.fontSize, '14pt');
+    assert.ok(citation.props.className.includes('citation-text'));
+    assert.ok(!citation.props.className.includes('select-all'));
+    const copySelection = nodes(tree).find(n => n.type === 'button' && text(n) === (language === 'ar' ? 'نسخ الجزء المحدد' : 'Copy selection'));
+    assert.ok(copySelection, 'Partial-copy control is available');
+    let prevented = false;
+    copySelection.props.onMouseDown({ preventDefault() { prevented = true; } });
+    assert.ok(prevented, 'Clicking copy preserves the selection');
+    const anchor = {}, focus = {};
+    context.window.getSelection = () => ({ anchorNode: anchor, focusNode: focus, toString: () => '2025' });
+    const container = { contains: node => node === anchor || node === focus };
+    const event = { currentTarget: { closest: () => ({ querySelector: () => container }) } };
+    copySelection.props.onClick(event);
+    await Promise.resolve();
+    assert.equal(copied, '2025', 'Copy only the selected substring');
+    copied = null;
+    context.window.getSelection = () => ({ anchorNode: {}, focusNode: focus, toString: () => 'outside text' });
+    copySelection.props.onClick(event);
+    assert.equal(copied, null, 'Do not copy text selected outside the citation');
+    context.window.getSelection = () => null;
+    copySelection.props.onClick(event);
+    assert.equal(copied, null, 'Empty selections do not copy the full citation');
   }
 }
 

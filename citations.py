@@ -89,7 +89,7 @@ def protect_bibtex_title(title: str) -> str:
         else: words.append(w)
     return " ".join(words)
 
-def format_apa_7th(paper: dict, bold_volume: bool = True, output_format: str = "markdown") -> str:
+def format_apa_7th(paper: dict, bold_volume: bool = False, output_format: str = "markdown") -> str:
     formatted_authors = []
     for a in paper.get('authors') or []:
         last, given = parse_author_name(str(a))
@@ -183,7 +183,7 @@ def format_apa_7th(paper: dict, bold_volume: bool = True, output_format: str = "
         doi_clause = f" https://doi.org/{doi}" if (doi and doi != "N/A") else ""
         return f"{authors_clause} ({year}). {title_clause} {journal_clause}{doi_clause}".strip()
 
-def format_apa_7th_html(paper: dict, bold_volume: bool = True) -> str:
+def format_apa_7th_html(paper: dict, bold_volume: bool = False) -> str:
     return format_apa_7th(paper, bold_volume=bold_volume, output_format="html")
 
 def format_apa_7th_plain(paper: dict) -> str:

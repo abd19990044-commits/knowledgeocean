@@ -43,7 +43,7 @@
       pgs = pgs.replace(/^(?:pp?\.?\s*)/i, "").replace(/[-–—]+/g, "–").trim();
 
       if (vol) {
-        journalClause += `, **${vol}**`;
+        journalClause += `, *${vol}*`;
         if (iss) journalClause += `(${iss})`;
       } else if (iss) {
         journalClause += `, (${iss})`;
@@ -1131,6 +1131,47 @@
       fallbackCopy(plainStr, successCallback);
     };
 
+    const copyCitationSelection = (event) => {
+      const block = event.currentTarget.closest("[data-citation-block]");
+      const citation = block && block.querySelector(".citation-text");
+      const selection = window.getSelection();
+      const selected = selection ? selection.toString() : "";
+      if (!citation || !selection || !selected.trim() ||
+          !citation.contains(selection.anchorNode) || !citation.contains(selection.focusNode)) {
+        showAlert(lang === "ar" ? "حدد الجزء المطلوب من نص الاستشهاد أولًا." : "Select the part of this citation you want to copy first.", "info", 2500);
+        return;
+      }
+      copyToClipboard(selected, () => showAlert(lang === "ar" ? "تم نسخ الجزء المحدد من الاستشهاد." : "Selected citation text copied.", "success", 2000));
+    };
+
+    const renderCitation = (paper) => html`
+      <div data-citation-block="true" className="space-y-2">
+        <div
+          className="citation-text select-text cursor-text leading-relaxed text-stone-900 dark:text-stone-100 p-3 rounded-[10px] bg-white/80 dark:bg-stone-900/70 border border-purple-100 dark:border-purple-900/40"
+          style=${{ fontFamily: "'Times New Roman', Times, serif", fontSize: "14pt" }}
+          dir="ltr"
+          aria-label=${lang === "ar" ? "نص الاستشهاد" : "Citation text"}
+          dangerouslySetInnerHTML=${{ __html: paper.apa_html || apaToHtmlFormatted(generateAPA(paper)) }}
+        />
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <span className="text-[11px] opacity-70">${lang === "ar" ? "يمكن تحديد جزء من النص ونسخه من قائمة التحديد أو باستخدام Ctrl+C." : "Select any part and use Copy from the selection menu or Ctrl+C."}</span>
+          <button type="button" onMouseDown=${(event) => event.preventDefault()} onClick=${copyCitationSelection}
+            className="px-3 py-1.5 rounded-[8px] border border-purple-200 dark:border-purple-800 text-[11px] font-bold text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40">
+            ${lang === "ar" ? "نسخ الجزء المحدد" : "Copy selection"}
+          </button>
+        </div>
+      </div>
+    `;
+
+    const renderCitationDetails = (paper) => html`
+      <details className="pt-2 border-t border-stone-200/60 dark:border-white/10">
+        <summary className="text-[12px] font-bold text-purple-700 dark:text-purple-300 cursor-pointer py-2">
+          ${lang === "ar" ? "عرض الاستشهاد (APA 7)" : "View citation (APA 7)"}
+        </summary>
+        ${renderCitation(paper)}
+      </details>
+    `;
+
     const handleDoiLookup = async (overrideDoi) => {
       let target = (overrideDoi || doiInput || "").trim();
       if (!target) {
@@ -2108,7 +2149,7 @@
                                 onClick=${() => {
                                   copyRichCitation(doiResult.apa, doiResult.apa_html, () => {
                                     setCopiedDoiApa(true);
-                                    showAlert(lang === "ar" ? "تم نسخ توثيق APA 7th للوورد بنجاح (المجلة مائلة والمجلد عريض وبدون نجوم)!" : "APA 7th citation copied for Word (Journal italicized, Volume bold, No asterisks)!", "success", 2500);
+                                    showAlert(lang === "ar" ? "تم نسخ توثيق APA 7th للوورد بنجاح (المجلة والمجلد مائلان)!" : "APA 7th citation copied for Word (journal and volume italicized)!", "success", 2500);
                                     setTimeout(() => setCopiedDoiApa(false), 2500);
                                   });
                                 }}
@@ -2123,14 +2164,7 @@
                               </button>
                             </div>
 
-                            <div
-                              className="text-[15px] leading-relaxed text-stone-900 dark:text-stone-100 select-all p-3 rounded-[10px] bg-white/80 dark:bg-stone-900/70 border border-purple-100 dark:border-purple-900/40"
-                              style=${{ fontFamily: "'Times New Roman', Times, serif", fontSize: "14pt" }}
-                              dir="ltr"
-                              dangerouslySetInnerHTML=${{
-                                __html: doiResult.apa_html || apaToHtmlFormatted(doiResult.apa)
-                              }}
-                            />
+                            ${renderCitation(doiResult)}
                           </div>
                         ` : null}
 
@@ -2220,7 +2254,7 @@
                               <button
                                 type="button"
                                 onClick=${() => {
-                                  copyRichCitation(doiResult.apa, doiResult.apa_html, () => showAlert(lang === "ar" ? "تم نسخ توثيق APA 7th منسقاً للوورد (مائل وعريض بدون نجوم)" : "Formatted APA 7th citation copied for Word (Italics & Bold, no asterisks)", "success", 2500));
+                                  copyRichCitation(doiResult.apa, doiResult.apa_html, () => showAlert(lang === "ar" ? "تم نسخ توثيق APA 7th منسقاً للوورد" : "Formatted APA 7th citation copied for Word", "success", 2500));
                                 }}
                                 className="px-3 py-1.5 rounded-[8px] bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 font-bold text-[11px] transition flex items-center gap-1 shadow-sm"
                                 title=${doiResult.apa_plain || apaToPlainText(doiResult.apa)}
@@ -2351,6 +2385,8 @@
                                 <div className="truncate">👤 ${(item.authors || []).join(", ")}</div>
                                 ${item.journal ? html`<div className="italic">📖 ${item.journal}</div>` : null}
                               </div>
+
+                              ${item.apa ? renderCitationDetails(item) : null}
 
                               <div className="pt-2 flex items-center justify-between flex-wrap gap-2 border-t border-stone-100 dark:border-white/5">
                                 <div className="flex items-center gap-2 font-mono text-[12px] font-bold text-blue-600 dark:text-blue-400 break-all" dir="ltr">
@@ -3408,6 +3444,7 @@
                               </button>
                             </div>
                           </div>
+                          ${renderCitationDetails(paper)}
                         </div>
                       `;
                     })}
@@ -3808,6 +3845,8 @@
                     </p>
                   `}
                 </div>
+
+                ${renderCitationDetails(abstractModalPaper)}
 
                 <!-- Links & DOIs in modal -->
                 <div className="pt-2 flex flex-wrap items-center justify-between gap-3 text-[12px]">
