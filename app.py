@@ -2632,6 +2632,10 @@ async def api_download_bibtex(request: Request):
     )
 
 
+TITLE_MATCH_MIN_SIMILARITY = 50.0
+TITLE_SEARCH_MAX_SECONDS = 30
+
+
 @app.api_route("/api/find-doi", methods=["GET", "POST"])
 async def api_find_doi(request: Request, title: str = Form(None), limit: int = Form(10), password: str = Form(None)):
     """
@@ -2716,14 +2720,45 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
 
     headers = {"User-Agent": "KnowledgeOcean/2.0 (mailto:contact@knowledgeocean.org)"}
 
+    # Diagnostics are scoped to the source worker. Never describe an unavailable
+    # source as a completed search with zero matches.
+    source_context = threading.local()
+
+    def _title_request(*args, **kwargs):
+        try:
+            response = requests.get(*args, **kwargs)
+            if response.status_code == 200:
+                source_context.successful = True
+            else:
+                source_context.failed = True
+            return response
+        except requests.RequestException:
+            source_context.failed = True
+            raise
+
+    def _run_title_source(fn):
+        source_context.successful = False
+        source_context.failed = False
+        try:
+            items = fn(clean_t)
+            status = ("partial" if source_context.successful else "unavailable") if source_context.failed else "completed"
+            return items, status
+        except Exception:
+            return [], "unavailable"
+
     # Worker functions for concurrent multi-database query
     def _search_crossref(t: str):
         items = []
         try:
             url = f"https://api.crossref.org/works?query.title={urllib.parse.quote(t)}&rows=25"
-            r = requests.get(url, headers=headers, timeout=6)
-            if r.status_code == 200:
-                for it in r.json().get("message", {}).get("items", []):
+            r = _title_request(url, headers=headers, timeout=6)
+            raw_items = r.json().get("message", {}).get("items", []) if r.status_code == 200 else []
+            if not any(calculate_accurate_title_similarity(t, (it.get("title") or [""])[0]) >= TITLE_MATCH_MIN_SIMILARITY for it in raw_items):
+                fallback = _title_request(f"https://api.crossref.org/works?query.bibliographic={urllib.parse.quote(t)}&rows=25", headers=headers, timeout=6)
+                if fallback.status_code == 200:
+                    raw_items += fallback.json().get("message", {}).get("items", [])
+            if raw_items:
+                for it in raw_items:
                     t_list = it.get("title") or []
                     title_str = t_list[0] if t_list else ""
                     doi = normalize_doi(it.get("DOI"))
@@ -2772,7 +2807,7 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                             "source": "crossref"
                         })
         except Exception:
-            pass
+            source_context.failed = True
         return items
 
     def _search_openalex(t: str):
@@ -2780,12 +2815,12 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
         try:
             # 1. Primary search: filter by title.search
             url = f"https://api.openalex.org/works?filter=title.search:{urllib.parse.quote(t)}&per_page=25"
-            r = requests.get(url, headers=headers, timeout=6)
+            r = _title_request(url, headers=headers, timeout=6)
             results = r.json().get("results", []) if r.status_code == 200 else []
             # 2. Fallback: if fewer than 5 results, search general query
-            if len(results) < 5:
+            if len(results) < 5 or not any(calculate_accurate_title_similarity(t, it.get("title") or "") >= TITLE_MATCH_MIN_SIMILARITY for it in results):
                 url_fb = f"https://api.openalex.org/works?search={urllib.parse.quote(t)}&per_page=25"
-                r_fb = requests.get(url_fb, headers=headers, timeout=6)
+                r_fb = _title_request(url_fb, headers=headers, timeout=6)
                 if r_fb.status_code == 200:
                     fb_results = r_fb.json().get("results", [])
                     seen_ids = {x.get("id") for x in results}
@@ -2828,7 +2863,7 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                         "source": "openalex"
                     })
         except Exception:
-            pass
+            source_context.failed = True
         return items
 
     def _search_semanticscholar(t: str):
@@ -2838,7 +2873,7 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
             if SEMANTIC_SCHOLAR_API_KEY:
                 s2_headers["x-api-key"] = SEMANTIC_SCHOLAR_API_KEY
             url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={urllib.parse.quote(t)}&limit=15&fields=title,authors,year,externalIds,venue,publicationVenue,openAccessPdf"
-            r = requests.get(url, headers=s2_headers, timeout=6)
+            r = _title_request(url, headers=s2_headers, timeout=6)
             if r.status_code == 200:
                 for it in r.json().get("data", []):
                     title_str = it.get("title") or ""
@@ -2864,7 +2899,7 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                             "source": "semanticscholar"
                         })
         except Exception:
-            pass
+            source_context.failed = True
         return items
 
     def _search_pubmed(t: str):
@@ -2874,12 +2909,12 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
             if not clean_pubmed_q:
                 clean_pubmed_q = t
             esearch_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={urllib.parse.quote(clean_pubmed_q)}[Title]&retmode=json&retmax=12"
-            r = requests.get(esearch_url, headers=headers, timeout=6)
+            r = _title_request(esearch_url, headers=headers, timeout=6)
             if r.status_code == 200:
                 id_list = r.json().get("esearchresult", {}).get("idlist", [])
                 if id_list:
                     esum_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id={','.join(id_list)}&retmode=json"
-                    r2 = requests.get(esum_url, headers=headers, timeout=6)
+                    r2 = _title_request(esum_url, headers=headers, timeout=6)
                     if r2.status_code == 200:
                         res_dict = r2.json().get("result", {})
                         for pmid in id_list:
@@ -2906,24 +2941,24 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                                     "source": "pubmed"
                                 })
         except Exception:
-            pass
+            source_context.failed = True
         return items
 
     def _search_europepmc(t: str):
         items = []
         try:
             url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE:%22{urllib.parse.quote(t)}%22&format=json&pageSize=12"
-            r = requests.get(url, headers=headers, timeout=6)
+            r = _title_request(url, headers=headers, timeout=6)
             raw_items = []
             if r.status_code == 200:
                 raw_items = r.json().get("resultList", {}).get("result", [])
 
             # Fallback if quoted returned 0
-            if not raw_items:
+            if not raw_items or not any(calculate_accurate_title_similarity(t, it.get("title") or "") >= TITLE_MATCH_MIN_SIMILARITY for it in raw_items):
                 t_words = " ".join(re.sub(r"[^\w\s]", " ", t).split())
                 if t_words:
                     url_fb = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE:({urllib.parse.quote(t_words)})&format=json&pageSize=12"
-                    r_fb = requests.get(url_fb, headers=headers, timeout=6)
+                    r_fb = _title_request(url_fb, headers=headers, timeout=6)
                     if r_fb.status_code == 200:
                         raw_items = r_fb.json().get("resultList", {}).get("result", [])
 
@@ -2946,14 +2981,14 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                         "source": "europepmc"
                     })
         except Exception:
-            pass
+            source_context.failed = True
         return items
 
     def _search_arxiv(t: str):
         items = []
         try:
             url = f"https://export.arxiv.org/api/query?search_query=ti:%22{urllib.parse.quote(t)}%22&max_results=12"
-            r = requests.get(url, headers=headers, timeout=6)
+            r = _title_request(url, headers=headers, timeout=6)
             raw_entries = []
             ns = {'atom': 'http://www.w3.org/2005/Atom', 'arxiv': 'http://arxiv.org/schemas/atom'}
             if r.status_code == 200:
@@ -2961,11 +2996,11 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                 raw_entries = root.findall('atom:entry', ns)
 
             # Fallback if quoted returned 0
-            if not raw_entries:
+            if not raw_entries or not any(calculate_accurate_title_similarity(t, entry.findtext('atom:title', default="", namespaces=ns)) >= TITLE_MATCH_MIN_SIMILARITY for entry in raw_entries):
                 t_clean_words = " ".join(re.sub(r"[^\w\s]", " ", t).split()[:8])
                 if t_clean_words:
                     url_fb = f"https://export.arxiv.org/api/query?search_query=ti:{urllib.parse.quote(t_clean_words)}&max_results=12"
-                    r_fb = requests.get(url_fb, headers=headers, timeout=6)
+                    r_fb = _title_request(url_fb, headers=headers, timeout=6)
                     if r_fb.status_code == 200:
                         root_fb = ET.fromstring(r_fb.text)
                         raw_entries = root_fb.findall('atom:entry', ns)
@@ -2993,24 +3028,24 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                         "source": "arxiv"
                     })
         except Exception:
-            pass
+            source_context.failed = True
         return items
 
     def _search_doaj(t: str):
         items = []
         try:
             url = f"https://doaj.org/api/search/articles/bibjson.title:%22{urllib.parse.quote(t)}%22?pageSize=12"
-            r = requests.get(url, headers=headers, timeout=6)
+            r = _title_request(url, headers=headers, timeout=6)
             raw_results = []
             if r.status_code == 200:
                 raw_results = r.json().get("results", [])
 
             # Fallback if quoted returned 0
-            if not raw_results:
+            if not raw_results or not any(calculate_accurate_title_similarity(t, (it.get("bibjson") or {}).get("title") or "") >= TITLE_MATCH_MIN_SIMILARITY for it in raw_results):
                 t_words = " ".join(re.sub(r"[^\w\s]", " ", t).split())
                 if t_words:
                     url_fb = f"https://doaj.org/api/search/articles/bibjson.title:({urllib.parse.quote(t_words)})?pageSize=12"
-                    r_fb = requests.get(url_fb, headers=headers, timeout=6)
+                    r_fb = _title_request(url_fb, headers=headers, timeout=6)
                     if r_fb.status_code == 200:
                         raw_results = r_fb.json().get("results", [])
 
@@ -3044,13 +3079,13 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                         "source": "doaj"
                     })
         except Exception:
-            pass
+            source_context.failed = True
         return items
 
     def _search_scholarly_registry(t: str):
         items = []
         try:
-            records = search_verified_registry(t, min_similarity=65.0)
+            records = search_verified_registry(t, min_similarity=TITLE_MATCH_MIN_SIMILARITY)
             for rec in records:
                 doi = normalize_doi(rec.get("doi"))
                 pub_url = rec.get("doi_url") or rec.get("url") or (f"https://doi.org/{doi}" if doi else "")
@@ -3070,7 +3105,7 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                     "source": rec.get("source", "ResearchGate / Verified Record")
                 })
         except Exception:
-            pass
+            source_context.failed = True
         return items
 
     search_tasks = [
@@ -3086,15 +3121,16 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
 
     candidates_by_key = {}
     title_to_doi_key = {}
+    source_states = {fn.__name__.removeprefix("_search_"): "pending" for fn in search_tasks}
 
     def _collect_candidates():
         pool = ThreadPoolExecutor(max_workers=len(search_tasks))
         try:
-            futures = {pool.submit(fn, clean_t): fn for fn in search_tasks}
+            futures = {pool.submit(_run_title_source, fn): fn.__name__.removeprefix("_search_") for fn in search_tasks}
             try:
-                for fut in as_completed(futures, timeout=12):
+                for fut in as_completed(futures, timeout=TITLE_SEARCH_MAX_SECONDS):
                     try:
-                        batch = fut.result()
+                        batch, source_states[futures[fut]] = fut.result()
                         if not isinstance(batch, list):
                             continue
                         for item in batch:
@@ -3148,16 +3184,19 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
                                 if not existing.get("pages") and item.get("pages"):
                                     existing["pages"] = item["pages"]
                     except Exception:
-                        pass
+                        source_states[futures[fut]] = "unavailable"
             except TimeoutError:
-                pass
+                for future, source in futures.items():
+                    if source_states[source] == "pending":
+                        source_states[source] = "timed_out"
 
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
 
     await run_in_threadpool(_collect_candidates)
 
-    candidates = list(candidates_by_key.values())
+    candidates = [item for item in candidates_by_key.values()
+                  if item.get("similarity", 0) >= TITLE_MATCH_MIN_SIMILARITY]
     for item in candidates:
         if not item.get("doi_url"):
             item["doi_url"] = item.get("oa_url") or item.get("url") or ""
@@ -3181,8 +3220,13 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
 
     candidates.sort(key=_rank_key, reverse=True)
 
-    target_limit = int(limit) if str(limit).isdigit() else 10
-    return JSONResponse({"ok": True, "count": len(candidates), "results": candidates[:target_limit]})
+    target_limit = max(1, min(50, int(limit))) if str(limit).isdigit() else 10
+    scan_complete = all(status == "completed" for status in source_states.values())
+    return JSONResponse({"ok": True, "count": len(candidates), "results": candidates[:target_limit],
+                         "min_similarity": TITLE_MATCH_MIN_SIMILARITY,
+                         "scan_complete": scan_complete,
+                         "source_statuses": source_states,
+                         "outcome": "matches_found" if candidates else ("no_match" if scan_complete else "incomplete_scan")})
 
 @app.api_route("/api/history", methods=["GET", "POST"])
 async def fetch_history_data(request: Request, password: str = None):
