@@ -574,6 +574,10 @@
     if (!msg || typeof msg !== 'string') {
       return targetLang === 'ar' ? 'جاري المعالجة...' : 'Processing...';
     }
+    const bilingualParts = msg.split(' / ');
+    if (bilingualParts.length === 2 && /[\u0600-\u06ff]/.test(bilingualParts[0]) && /^[A-Z]/.test(bilingualParts[1])) {
+      return bilingualParts[targetLang === 'ar' ? 0 : 1];
+    }
     if (msg.includes(' / Preparing report files on the server:')) {
       return msg.split(' / ')[targetLang === 'ar' ? 0 : 1];
     }
@@ -900,6 +904,9 @@
     const [copiedPath, setCopiedPath] = useState(false);
     const [showDownloadPanel, setShowDownloadPanel] = useState(false);
     const [showModal, setShowModal] = useState(false);
+    const [stopDecision, setStopDecision] = useState(null);
+    const [stopBusy, setStopBusy] = useState(false);
+    const stopChoiceRef = useRef(null);
     const [doneTitle, setDoneTitle] = useState(() => (lang === "ar" ? "اكتمل البحث" : "Search Completed"));
     const [alertInfo, setAlertInfo] = useState({ text: null, type: "error" });
 
@@ -1459,9 +1466,16 @@
           setProgress(data.progress || 0);
           setStatusMsg(localizeTaskMessage(data.message || data.msg, lang));
 
+          if (data.status === "awaiting_stop_decision" && !stopChoiceRef.current) {
+            setStopDecision({count: data.collected_count || 0, ready: true, charged: data.quota_charged_units || 0});
+          }
           if (data.status === "completed") {
+            setStopDecision(null);
             if (Array.isArray(data.provider_warnings) && data.provider_warnings.length) {
               showAlert(data.provider_warnings.join("\n"), "info", 0);
+            }
+            if ((data.report_parts || []).some(part => part.oversized_record)) {
+              showAlert(lang === "ar" ? "تجاوز مصدر واحد حد محتوى PDF؛ حُفظ كاملًا في ملف نصي مستقل داخل الحزمة، دون تقسيم أو اختصار. راجع دليل ملفات الحزمة." : "A source exceeded the PDF content limit and was retained intact in one text file in the archive. It was neither divided nor truncated. See the archive file guide.", "info", 0);
             }
             if (pollingRef.current) clearInterval(pollingRef.current);
             setIsSearching(false);
@@ -1522,7 +1536,17 @@
               }
             }, 600);
 
+          } else if (data.status === "cancelled") {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            setIsSearching(false);
+            setStopDecision(null);
+            setResultsPapers([]);
+            setShowDownloadPanel(false);
+            setProgress(0);
+            fetchQuota();
+            showAlert(lang === "ar" ? "أُلغي البحث نهائيًا. يبقى الرصيد المستخدم مخصومًا." : "The search was discarded. The charged quota is retained.", "info", 6000);
           } else if (data.status === "error" || data.status === "failed") {
+            setStopDecision(null);
             if (pollingRef.current) clearInterval(pollingRef.current);
             setIsSearching(false);
             const failureMessage = data.error || data.message || (lang === "ar" ? "فشلت عملية البحث" : "Search operation failed");
@@ -1576,6 +1600,8 @@
       }
 
       showAlert(null);
+      stopChoiceRef.current = null;
+      setStopDecision(null);
       setIsSearching(true);
       setShowDownloadPanel(false);
       setResultsPapers([]);
@@ -1632,35 +1658,45 @@
     };
 
     const handleCancelTask = async () => {
-      if (!taskId) {
-        setIsSearching(false);
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        return;
-      }
-
-      if (isFileProtocol) {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        setIsSearching(false);
-        setStatusMsg(lang === "ar" ? "تم الإلغاء (معاينة)" : "Cancelled (Preview)");
-        setProgress(0);
-        return;
-      }
-
+      if (!taskId || stopBusy || stopDecision || stopChoiceRef.current) return;
+      setStopBusy(true);
       try {
-        const res = await fetch(`/api/cancel/${taskId}`, { method: "POST" });
+        const form = new FormData();
+        form.append("action", "pause");
+        const res = await fetch(`/api/cancel/${taskId}`, {method: "POST", body: form});
         const data = await res.json();
-        if (data && data.preserved) {
-          showAlert(data.message || (lang === "ar" ? "تم إيقاف البحث — جاري الآن توليد وتجهيز ملف الأبحاث بما تم جمعه..." : "Search stopped — generating document with collected papers..."), "info", 6000);
-          setStatusMsg(lang === "ar" ? "تم إيقاف البحث — جاري الآن توليد وتجهيز ملف الأبحاث..." : "Search stopped — generating document with collected papers...");
-          return; // Keep polling active until status completes so results & download appear
+        if (!res.ok) throw new Error(data.detail || "Unable to stop collection");
+        if (data.status !== "completed" && data.status !== "cancelled" && data.status !== "error") {
+          setStopDecision({count: data.collected_count || 0, ready: data.status === "awaiting_stop_decision", charged: data.quota_charged_units || 0});
         }
-      } catch (e) {}
+      } catch (err) {
+        showAlert(lang === "ar" ? "تعذّر إيقاف جمع النتائج؛ يُرجى المحاولة مجددًا." : "Collection could not be stopped. Please try again.", "error");
+      } finally {
+        setStopBusy(false);
+      }
+    };
 
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      setIsSearching(false);
-      setStatusMsg(lang === "ar" ? "تم إيقاف البحث بنجاح" : "Search stopped successfully");
-      setProgress(0);
-      showAlert(lang === "ar" ? "تم إيقاف وإلغاء عملية البحث بناءً على طلبك" : "Search operation stopped as requested", "info", 4000);
+    const handleStopChoice = async (action) => {
+      if (stopBusy || !stopDecision?.ready) return;
+      stopChoiceRef.current = action;
+      setStopBusy(true);
+      try {
+        const form = new FormData();
+        form.append("action", action);
+        const res = await fetch(`/api/cancel/${taskId}`, {method: "POST", body: form});
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Unable to submit the decision");
+        setStopDecision(null);
+        setStatusMsg(action === "preserve"
+          ? (lang === "ar" ? "جارٍ إعداد النتائج المسترجعة وملفات PDF على الخادم..." : "Preparing the retrieved results and PDF files on the server...")
+          : (lang === "ar" ? "جارٍ إلغاء البحث وحذف ملفاته المؤقتة..." : "Discarding the search and its temporary files..."));
+        fetchQuota();
+      } catch (err) {
+        stopChoiceRef.current = null;
+        showAlert(lang === "ar" ? "تعذّر حفظ اختيارك؛ يُرجى المحاولة مجددًا." : "Your decision could not be saved. Please try again.", "error");
+      } finally {
+        setStopBusy(false);
+      }
     };
 
     const setYearPreset = (type, fromVal, toVal) => {
@@ -1930,7 +1966,7 @@
                 <option value="ar">العربية (RTL)</option>
                 <option value="en">English</option>
               </select>
-              <a id="download-user-guide" href=${`/api/user-guide/${guideLanguage}?v=20261029-4`} download=${`KnowledgeOcean_User_Guide_${guideLanguage.toUpperCase()}.pdf`} className="inline-flex items-center h-10 rounded-[12px] bg-teal-700 hover:bg-teal-800 px-4 text-white text-xs font-bold transition">
+              <a id="download-user-guide" href=${`/api/user-guide/${guideLanguage}?v=20261030-1`} download=${`KnowledgeOcean_User_Guide_${guideLanguage.toUpperCase()}.pdf`} className="inline-flex items-center h-10 rounded-[12px] bg-teal-700 hover:bg-teal-800 px-4 text-white text-xs font-bold transition">
                 ${lang === "ar" ? "تنزيل دليل الاستخدام (PDF)" : "Download User Guide (PDF)"}
               </a>
             </div>
@@ -3016,6 +3052,7 @@
                       <button
                         type="button"
                         onClick=${handleCancelTask}
+                        disabled=${stopBusy || !!stopDecision || !!stopChoiceRef.current}
                         className="text-[12px] font-bold px-3 py-1 rounded-full bg-white border border-rose-300 text-rose-700 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition shadow-sm cursor-pointer flex items-center gap-1.5"
                         title=${lang === "ar" ? "إيقاف عملية البحث الجارية فوراً" : "Stop ongoing search immediately"}
                       >
@@ -3687,8 +3724,8 @@
                   </div>
                   <p className="opacity-85 text-stone-700 dark:text-stone-300 whitespace-pre-line">
                     ${lang === "ar"
-                      ? "• تقرير موحد: تجميع السجلات المسترجعة وملخصاتها المتاحة وروابطها في ملف PDF.\n• صفحة جديدة لكل بحث: عند استخراج الأبحاث بالملخصات لحاملي الرمز، يبدأ كل بحث في صفحة جديدة مستقلة لقراءة وطباعة أكاديمية مريحة.\n• حفظ النتائج عند الإيقاف: يتوقف جمع السجلات وتُعد النتائج المسترجعة حتى تلك اللحظة للتنزيل."
-                      : "• Search report: Retrieved records, available abstracts, and source links are consolidated into a PDF document.\n• New Page per Abstract: For authorized keys, each paper in abstract mode starts on a fresh page for comfortable reading and printing.\n• Stop and retain results: Stopping collection prepares the records already retrieved for download."
+                      ? "• تقرير موحد: تجميع السجلات المسترجعة وملخصاتها المتاحة وروابطها في ملف PDF.\n• صفحة جديدة لكل بحث: عند استخراج الأبحاث بالملخصات لحاملي الرمز، يبدأ كل بحث في صفحة جديدة مستقلة لقراءة وطباعة أكاديمية مريحة.\n• حد الملف: 500 ألف كلمة لكل PDF، مع التقسيم بين الأبحاث الكاملة فقط.\n• قرار الإيقاف: عرض العدد المسترجع للاختيار بين الاحتفاظ بالنتائج وإنشاء PDF أو الإلغاء النهائي، مع إبقاء الرصيد المستخدم مخصومًا."
+                      : "• Search report: Retrieved records, available abstracts, and source links are consolidated into a PDF document.\n• New Page per Abstract: For authorized keys, each paper in abstract mode starts on a fresh page for comfortable reading and printing.\n• File limit: 500,000 words per PDF, with divisions only between complete records.\n• Stop decision: Review the final count and choose retention with PDF generation or permanent cancellation. The charged quota is retained."
                     }
                   </p>
                 </div>
@@ -4407,6 +4444,23 @@
                 >
                   ${loginLoading ? (lang === "ar" ? "جارٍ التحقق..." : "Verifying...") : (lang === "ar" ? "🔑 تسجيل الدخول / تفعيل" : "🔑 Sign In / Activate")}
                 </button>
+              </div>
+            </div>
+          </div>
+        ` : null}
+
+        ${stopDecision ? html`
+          <div className="fixed inset-0 z-[120] bg-black/70 flex items-center justify-center p-4">
+            <div role="dialog" aria-modal="true" aria-labelledby="stop-decision-title" className="w-full max-w-lg rounded-2xl bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 p-6 shadow-2xl space-y-4" dir=${lang === "ar" ? "rtl" : "ltr"}>
+              <h2 id="stop-decision-title" className="text-xl font-bold">${lang === "ar" ? "إيقاف البحث وتحديد مصير النتائج" : "Stop search and manage retrieved results"}</h2>
+              <p role="status">${stopDecision.ready
+                ? (lang === "ar" ? `توقف جمع النتائج. بلغ عدد الأبحاث المسترجعة ${stopDecision.count}.` : `Collection has stopped. ${stopDecision.count} publications were retrieved.`)
+                : (lang === "ar" ? "جارٍ إيقاف جمع النتائج وتثبيت العدد النهائي للأبحاث..." : "Stopping collection and determining the final publication count...")}</p>
+              <p className="text-sm">${lang === "ar" ? "يمكنك الاحتفاظ بالنتائج وعرضها وإعداد ملفات PDF، أو إلغاء البحث نهائيًا وحذف نتائجه وملفاته المؤقتة." : "Retain the results for viewing and PDF generation, or discard the search and delete its results and temporary files."}</p>
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">${lang === "ar" ? `يبقى الرصيد المستخدم${stopDecision.charged ? ` (${stopDecision.charged} وحدة)` : ""} مخصومًا في الحالتين، ولا يُسترد عند الإلغاء.` : `The charged quota${stopDecision.charged ? ` (${stopDecision.charged} units)` : ""} is retained in both cases and is not refunded on cancellation.`}</p>
+              <div className="flex flex-wrap gap-3">
+                <button type="button" onClick=${() => handleStopChoice("preserve")} disabled=${stopBusy || !stopDecision.ready || !stopDecision.count} className="rounded-lg bg-blue-600 text-white px-4 py-3 font-bold disabled:opacity-40">${lang === "ar" ? "عرض النتائج وإنشاء PDF" : "View results and generate PDFs"}</button>
+                <button type="button" onClick=${() => handleStopChoice("discard")} disabled=${stopBusy || !stopDecision.ready} className="rounded-lg bg-red-700 text-white px-4 py-3 font-bold disabled:opacity-40">${lang === "ar" ? "إلغاء البحث نهائيًا" : "Discard search"}</button>
               </div>
             </div>
           </div>

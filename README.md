@@ -164,3 +164,15 @@ Abstracts unavailable from responding sources remain unavailable; the system
 does not synthesize abstracts. Structured abstract sections and complete text
 are retained in PDF, CSV, BibTeX and RIS exports. Browser results render 50
 records per page while filtering still searches the entire result set.
+
+Every generated PDF enforces a hard ceiling of 500,000 displayed words, including
+headings, repeated page elements and metadata. Oversized batches split only
+between complete records. A single source that cannot fit is retained intact
+in one UTF-8 text file with an explicit manifest notice, never in PDF fragments.
+
+Stopping freezes retrieval and displays the acknowledged final count. The owner
+chooses to retain results and generate reports, or discard the results and
+temporary files. The charged allowance is retained for both user-requested
+actions, including cancellation before retrieval. Normal completion and system
+failures retain their existing reconciliation policy. Waiting for the decision
+releases the retrieval slot and does not block other users' searches.

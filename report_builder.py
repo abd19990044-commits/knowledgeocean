@@ -16,6 +16,15 @@ from config_loader import bounded_env_int
 _POOL = None
 _POOL_LOCK = threading.Lock()
 _SLOTS = threading.BoundedSemaphore(4)
+MAX_PDF_WORDS = 500_000
+
+
+class PDFWordLimitExceeded(ValueError):
+    pass
+
+
+def count_words(text):
+    return len(str(text or "").split())
 
 
 def _pool():
@@ -41,10 +50,13 @@ def _render(job):
     path = job["path"]
     temp_path = path + ".partial"
     try:
+        estimate = 2000 + sum(count_words(row.get("abstract")) + 2 * count_words(json.dumps({k: v for k, v in row.items() if k != "abstract"}, ensure_ascii=False)) + 1000 for row in job["papers"])
+        if (len(job["papers"]) > 1 and estimate > MAX_PDF_WORDS) or (len(job["papers"]) == 1 and count_words(job["papers"][0].get("abstract")) > MAX_PDF_WORDS):
+            raise PDFWordLimitExceeded("Split a large batch before laying out its pages")
         if job["kind"] == "index":
-            generate_all_papers_index(job["query"], job["papers"], temp_path, title_prefix=job["label"])
+            word_count = generate_all_papers_index(job["query"], job["papers"], temp_path, title_prefix=job["label"])
         else:
-            generate_documents(job["query"], job["papers"], temp_path, **job["options"])
+            word_count = generate_documents(job["query"], job["papers"], temp_path, **job["options"])
         with open(temp_path, "rb") as stream:
             if stream.read(5) != b"%PDF-":
                 raise ValueError("PDF renderer produced an invalid document")
@@ -52,7 +64,30 @@ def _render(job):
             if b"%%EOF" not in stream.read():
                 raise ValueError("PDF renderer produced an incomplete document")
         os.replace(temp_path, path)
-        return path
+        return [{"path": path, "word_count": word_count, "records": len(job["papers"])}]
+    except PDFWordLimitExceeded:
+        rows = job["papers"]
+        if len(rows) > 1:
+            middle = len(rows) // 2
+            chunks = [rows[:middle], rows[middle:]]
+        elif rows:
+            # A record is indivisible. If it cannot fit in a legal PDF, retain
+            # the entire source in one UTF-8 text file, never in PDF fragments.
+            text_path = os.path.splitext(path)[0] + "_Complete_Record.txt"
+            text = json.dumps(rows[0], ensure_ascii=False, indent=2)
+            with open(text_path + ".partial", "w", encoding="utf-8") as stream:
+                stream.write(text)
+            os.replace(text_path + ".partial", text_path)
+            return [{"path": text_path, "word_count": count_words(text), "records": 1,
+                     "file_type": "txt", "oversized_record": True,
+                     "notice": "The complete record is retained in one text file because its PDF representation would exceed 500,000 words. No record was divided or truncated."}]
+        else:
+            raise PDFWordLimitExceeded("A single record's metadata exceeds the PDF word limit")
+        result = []
+        for number, chunk in enumerate(chunks, 1):
+            child_path = os.path.splitext(path)[0] + f"_Words_{number}.pdf"
+            result.extend(_render(dict(job, papers=chunk, path=child_path)))
+        return result
     finally:
         if os.path.isfile(temp_path):
             os.remove(temp_path)
@@ -91,12 +126,12 @@ class ReportBuilder:
     At most two PDF jobs per task are in flight; all tasks share two processes
     and four queue slots. No unbounded executor queue or single enormous PDF.
     """
-    def __init__(self, directory, query, stem, *, db_source="all", include_abstracts=False, is_other=False):
+    def __init__(self, directory, query, stem, *, db_source="all", include_abstracts=False, is_other=False, is_guest=False):
         self.directory = directory
         self.query = query
         self.stem = stem
         self.include_abstracts = include_abstracts
-        self.options = {"db_source": db_source, "include_abstracts": include_abstracts, "is_guest": False, "is_other": is_other}
+        self.options = {"db_source": db_source, "include_abstracts": include_abstracts, "is_guest": is_guest, "is_other": is_other}
         self.batch_size = bounded_env_int("REPORT_BATCH_SIZE", 100 if include_abstracts else 250, 25, 250)
         self.index_size = bounded_env_int("REPORT_INDEX_BATCH_SIZE", 250, 25, 250)
         self.workdir = tempfile.mkdtemp(prefix=".report_", dir=directory)
@@ -139,14 +174,23 @@ class ReportBuilder:
         ready = []
         manifest = []
         covered = set()
+        ready_jobs = 0
 
-        def add_manifest(job, count, reused=False):
-            manifest.append({"filename": os.path.basename(job["path"]), "kind": job["kind"], "records": count, "group": job["options"]["doc_type"], "prepared_during_search": reused})
+        def add_result(job, result, reused=False):
+            outputs = [{"path": result, "records": len(job["papers"])}] if isinstance(result, str) else result
+            for output in outputs:
+                ready.append(output["path"])
+                manifest.append({"filename": os.path.basename(output["path"]), "kind": job["kind"],
+                                 "records": output["records"], "word_count": output.get("word_count"),
+                                 "file_type": output.get("file_type", "pdf"),
+                                 "oversized_record": output.get("oversized_record", False),
+                                 "notice": output.get("notice", ""),
+                                 "group": job["options"]["doc_type"], "prepared_during_search": reused})
 
         for part in self.prepared:
             # Wait before reusing its path. A late provider may have enriched or
             # reclassified records since this batch was initially prepared.
-            part["future"].result()
+            result = part["future"].result()
             members = [selected[key] for key in part["ids"] if key in selected and bool(selected[key].is_preprint) == (part["group"] == "preprints")]
             if not members:
                 continue
@@ -154,10 +198,10 @@ class ReportBuilder:
             job = dict(part["job"], papers=members)
             covered.update(id(p) for p in members)
             if digest == part["digest"]:
-                ready.append(job["path"])
+                add_result(job, result, True)
+                ready_jobs += 1
             else:
                 pending_jobs.append(job)
-            add_manifest(job, len(rows), digest == part["digest"])
 
         for group, is_preprint in (("published", False), ("preprints", True)):
             members = [p for p in papers if bool(p.is_preprint) == is_preprint]
@@ -167,18 +211,16 @@ class ReportBuilder:
                 batch = remaining[start:start + self.batch_size]
                 job = self._job("report", batch, group, number)
                 pending_jobs.append(job)
-                add_manifest(job, len(batch))
                 number += 1
             for number, start in enumerate(range(0, len(members), self.index_size), 1):
                 batch = members[start:start + self.index_size]
                 job = self._job("index", batch, group, number)
                 pending_jobs.append(job)
-                add_manifest(job, len(batch))
 
         # Bound payloads submitted to the process pool, not just worker count.
-        total = len(ready) + len(pending_jobs)
+        total = ready_jobs + len(pending_jobs)
         jobs = iter(pending_jobs)
-        active = set()
+        active = {}
         while True:
             while len(active) < 2:
                 job = next(jobs, None)
@@ -187,15 +229,16 @@ class ReportBuilder:
                 rows, _ = _snapshot(job["papers"], self.include_abstracts and job["kind"] == "report")
                 future = _submit(dict(job, papers=rows))
                 self.futures.append(future)
-                active.add(future)
+                active[future] = job
             if progress:
-                progress(len(ready), total)
+                progress(ready_jobs, total)
             if not active:
                 break
-            completed, active = wait(active, return_when=FIRST_COMPLETED)
+            completed, _ = wait(active, return_when=FIRST_COMPLETED)
             # Never publish a successful package that silently omits a failed PDF.
             for future in completed:
-                ready.append(future.result())
+                add_result(active.pop(future), future.result())
+                ready_jobs += 1
 
         paths = []
         for path in ready:
@@ -219,7 +262,7 @@ class ReportBuilder:
         guide = os.path.join(self.directory, f"START_HERE_{self.stem}.html")
         links = "\n".join(f'<li><a href="{html.escape(part["filename"], quote=True)}">{html.escape(part["filename"])}</a> ({part["records"]})</li>' for part in manifest)
         with open(guide, "w", encoding="utf-8") as stream:
-            stream.write('<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Knowledge Ocean - Report index</title><style>body{font:18px/1.8 sans-serif;max-width:1000px;margin:40px auto;padding:20px}li{direction:ltr;text-align:left;overflow-wrap:anywhere}</style><h1>دليل ملفات البحث / Report file guide</h1><p>فك ضغط الحزمة أولًا. قُسّمت التقارير والفهارس الكبيرة إلى أجزاء لتسهيل فتحها. تحتوي الأجزاء مجتمعة على جميع السجلات، دون حذف النتائج.</p><p dir="ltr">Extract the archive first. Large reports and indexes are divided into manageable PDF parts. Together, the parts contain all retrieved records. The complete CSV index includes every record.</p><p>' + html.escape(self.query) + f' - {len(papers)} records</p><p><a href="{html.escape(os.path.basename(csv_path), quote=True)}">الفهرس الكامل / Complete CSV index</a></p><ul>' + links + '</ul></html>')
+            stream.write('<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Knowledge Ocean - Report index</title><style>body{font:18px/1.8 sans-serif;max-width:1000px;margin:40px auto;padding:20px}li{direction:ltr;text-align:left;overflow-wrap:anywhere}</style><h1>دليل ملفات البحث / Report file guide</h1><p>فك ضغط الحزمة أولًا. قُسّمت التقارير والفهارس الكبيرة إلى أجزاء لتسهيل فتحها. تحتوي الأجزاء مجتمعة على جميع السجلات، دون حذف النتائج.</p><p>لا يتجاوز أي PDF مقدار 500 ألف كلمة، ولا يُقسّم البحث الواحد بين ملفين. يُحفظ المصدر الذي يتجاوز الحد بمفرده كاملًا في ملف نصي مع تنبيه في ملف البيان.</p><p dir="ltr">No PDF exceeds 500,000 words. Records are never divided between files. A single oversized source is retained intact in a text file and identified in the manifest.</p><p dir="ltr">Extract the archive first. Large reports and indexes are divided into manageable PDF parts. Together, the parts contain all retrieved records. The complete CSV index includes every record.</p><p>' + html.escape(self.query) + f' - {len(papers)} records</p><p><a href="{html.escape(os.path.basename(csv_path), quote=True)}">الفهرس الكامل / Complete CSV index</a></p><ul>' + links + '</ul></html>')
         paths.append(guide)
         return paths, manifest
 

@@ -97,7 +97,7 @@
       [
         [
           "حالة المهمة",
-          "توضح مؤشرات التقدم مراحل الاسترجاع والتدقيق وإعداد التقرير. وقد تنتهي المهمة بعدد أقل من المطلوب. ويسمح إيقاف البحث بإعداد ما جُمع من سجلات؛ أما الإيقاف قبل استرجاع أي سجل فلا ينتج تقريراً."
+          "توضح مؤشرات التقدم مراحل الاسترجاع والتدقيق وإعداد التقرير. يعرض إيقاف البحث العدد النهائي المسترجع، ويطلب الاختيار بين عرض النتائج وإعداد ملفات PDF أو الإلغاء النهائي. لا ينتج تقرير عند خلو النتائج."
         ],
         [
           "فحص البيانات",
@@ -117,7 +117,7 @@
         ],
         [
           "تسوية الرصيد",
-          "تُرفض الطلبات غير الصالحة قبل خصم الرصيد. ويُعاد الرصيد غير المستخدم عند نقص النتائج، كما يُرد الرصيد المحجوز عند فشل التصدير. واستئناف مهمة نشطة لا ينشئ طلباً مكرراً للمستخدم نفسه."
+          "تُرفض الطلبات غير الصالحة قبل الخصم. ويُسوّى الرصيد غير المستخدم عند الاكتمال العادي أو فشل التصدير. أما الإيقاف أو الإلغاء بطلب المستخدم فلا يسترد الرصيد المستخدم، سواء احتُفظ بالنتائج أم أُلغيت نهائيًا."
         ]
       ]
     ],
@@ -180,6 +180,33 @@
         [
           "إنهاء الجلسة",
           "تُنزّل التقارير المطلوبة وتُراجع بيانات الاستشهادات، ثم يُستخدم زر تسجيل الخروج أعلى الموقع لإنهاء الجلسة. تتبع لغة الدليل لغة الواجهة افتراضياً عند فتح الصفحة أو تبديل لغتها، مع إتاحة اختيار العربية أو الإنكليزية يدوياً."
+        ]
+      ]
+    ],
+    [
+      "إدارة المخرجات",
+      "التقارير الكبيرة وقرار الإيقاف",
+      "تُحفظ السجلات كاملة ويُراعى حجم الملف وإمكان فتحه.",
+      [
+        [
+          "إعداد الملفات في الخلفية",
+          "يبدأ البحث الشامل تجهيز أجزاء التقارير على الخادم أثناء الاسترجاع. وتُحدّث الأجزاء التي تتغير بياناتها قبل اعتماد الحزمة، باستخدام تنسيق التقرير نفسه."
+        ],
+        [
+          "حد حجم المحتوى",
+          "لا يتجاوز محتوى أي ملف PDF مقدار 500 ألف كلمة، بما يشمل النصوص المعروضة فيه. ويحدث التقسيم بين السجلات الكاملة فقط؛ فلا يُوزّع بحث واحد أو ملخصه بين ملفين."
+        ],
+        [
+          "المصدر الاستثنائي الكبير",
+          "إذا تجاوز مصدر واحد الحد بمفرده، يُحفظ كاملًا في ملف نصي مستقل داخل الحزمة مع تنبيه، ولا يُجزّأ أو يُختصر لإدخاله في PDF."
+        ],
+        [
+          "فتح الفهرس الشامل",
+          "تضم الحزمة فهارس PDF محدودة الحجم، وفهرس CSV كاملًا، ودليل ملفات HTML. تُفك الحزمة أولًا، ثم يُفتح دليل الملفات للوصول إلى الأجزاء المناسبة."
+        ],
+        [
+          "الاختيار بعد الإيقاف",
+          "يعرض الإشعار عدد الأبحاث بعد توقف الجمع. يتيح الخيار الأول عرضها وإنشاء ملفات PDF؛ ويحذف الخيار الثاني نتائج البحث وملفاته المؤقتة نهائيًا. ويبقى الرصيد المستخدم مخصومًا في الحالتين."
         ]
       ]
     ]
@@ -282,7 +309,7 @@
       [
         [
           "Task status",
-          "Progress indicators distinguish retrieval, record assessment, and report preparation. A task may finish below its requested count. Stopping may preserve collected records, whereas stopping before any retrieval produces no report."
+          "Progress indicators distinguish retrieval, record assessment, and report preparation. Stopping displays the final retrieved count and requires a choice: retain the results for viewing and PDF generation, or discard the search. No report is produced for an empty result set."
         ],
         [
           "Metadata inspection",
@@ -302,7 +329,7 @@
         ],
         [
           "Credit reconciliation",
-          "Invalid requests are rejected before charging credits. Unused credits are returned when fewer eligible records are retrieved, and a failed export refunds its reservation. Resuming an active task does not create a duplicate search for the same user."
+          "Invalid requests are rejected before charging. Unused credits are reconciled after normal completion or export failure. User-requested stopping or cancellation retains the charged allowance, whether the results are preserved or discarded."
         ]
       ]
     ],
@@ -365,6 +392,33 @@
         [
           "Ending a session",
           "Download required reports and verify citations, then use Log Out in the page header to end the session. The handbook defaults to the interface language when the page opens or its language changes; Arabic or English may also be selected manually."
+        ]
+      ]
+    ],
+    [
+      "OUTPUT MANAGEMENT",
+      "Large reports and stop decisions",
+      "Complete records are retained while individual files remain manageable.",
+      [
+        [
+          "Background report preparation",
+          "Comprehensive searches prepare report parts on the server during retrieval. Parts affected by metadata changes are refreshed before packaging, using the same report format."
+        ],
+        [
+          "PDF content limit",
+          "No PDF may exceed 500,000 words, including its displayed text. Parts are divided only between complete records. A publication or its abstract is never distributed across two files."
+        ],
+        [
+          "An exceptionally large source",
+          "If one source alone cannot fit within the limit, the complete source is retained in one separate text file in the archive with an explicit notice. It is neither divided nor truncated to fit a PDF."
+        ],
+        [
+          "Opening the complete index",
+          "The archive contains manageable PDF index parts, a complete CSV index and an HTML file guide. Extract the archive before opening the file guide and selecting the required parts."
+        ],
+        [
+          "Choosing after stopping",
+          "The notification gives the final retrieved publication count. The first option retains the results for viewing and PDF generation; the second permanently discards the search results and temporary files. The charged quota is retained in both cases."
         ]
       ]
     ]

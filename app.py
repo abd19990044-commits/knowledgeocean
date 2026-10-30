@@ -71,7 +71,7 @@ from network import (
 )
 from providers import FETCH_BATCH_MAP, extract_crossref_authors, extract_crossref_year
 from abstracts import enrich_abstracts, normalize_abstract
-from report_builder import ReportBuilder
+from report_builder import ReportBuilder, MAX_PDF_WORDS, PDFWordLimitExceeded, count_words
 from database import (
     init_db, db_set_task, db_get_task, db_check_rate_limit,
     db_get_remaining_quota, db_reset_quota, db_refund_quota,
@@ -408,6 +408,7 @@ def user_hash_for(password: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────
 class AcademicPDF(FPDF):
     def __init__(self, doc_header=""):
+        self.word_count = 0
         super().__init__(format="A4")
         self.doc_header = doc_header
         self.set_auto_page_break(auto=True, margin=18)
@@ -439,6 +440,19 @@ class AcademicPDF(FPDF):
             pass
 
         self.set_font(self.font_family_used, "", 10)
+
+    def _count_words(self, text):
+        self.word_count += count_words(text)
+        if self.word_count > MAX_PDF_WORDS:
+            raise PDFWordLimitExceeded("PDF content exceeds 500,000 words")
+
+    def cell(self, w=None, h=None, text="", *args, **kwargs):
+        self._count_words(text)
+        return super().cell(w, h, text, *args, **kwargs)
+
+    def multi_cell(self, w, h=None, text="", *args, **kwargs):
+        self._count_words(text)
+        return super().multi_cell(w, h, text, *args, **kwargs)
 
     def header(self):
         if self.page_no() == 1:
@@ -779,6 +793,7 @@ def generate_documents(query, papers, pdf_path, md_path=None, db_source="all", d
             global_idx += 1
 
     pdf.output(pdf_path)
+    return pdf.word_count
 
 def generate_all_papers_index(query, papers, pdf_path, title_prefix=""):
     papers = [p.to_dict() if hasattr(p, 'to_dict') else p for p in papers]
@@ -832,7 +847,7 @@ def generate_all_papers_index(query, papers, pdf_path, title_prefix=""):
         pdf.ln(6)
         pdf.write_block("لم يُعثر على أي أوراق.", size=12, style="B", align="C", color=(180, 60, 0))
         pdf.output(pdf_path)
-        return 0
+        return pdf.word_count
 
     global_i = 1
     total_recs = sum(len(g[2]) for g in groups)
@@ -894,7 +909,7 @@ def generate_all_papers_index(query, papers, pdf_path, title_prefix=""):
             pdf.ln(2)
             global_i += 1
     pdf.output(pdf_path)
-    return len(papers)
+    return pdf.word_count
 
 
 def generate_bibtex_file(papers: List[dict], filepath: str):
@@ -951,7 +966,7 @@ def find_active_task_for_key(password: str = "", uh: str = "", guest_token: str 
     with TASKS_LOCK:
         for tid, t in TASKS.items():
             status = t.get("status")
-            if status in ("queued", "processing", "stopping"):
+            if status in ("queued", "processing", "stopping", "awaiting_stop_decision"):
                 if target_code_hash and t.get("code_hash") == target_code_hash:
                     return {
                         "has_active_task": True,
@@ -989,7 +1004,7 @@ def _set_task(task_id, **kwargs):
     with TASKS_LOCK:
         cur = TASKS.get(task_id, {})
         cur.update(kwargs)
-        if kwargs.get("status") in ("completed", "error"):
+        if kwargs.get("status") in ("completed", "error", "cancelled"):
             cur["_done_at"] = time.time()
         TASKS[task_id] = cur
     try:
@@ -1000,6 +1015,39 @@ def _set_task(task_id, **kwargs):
 def _check_cancelled(task_id):
     if task_id in CANCELLED_TASKS:
         raise ValueError("تم إلغاء البحث بناءً على طلبك.")
+
+
+class UserDiscardedSearch(Exception):
+    pass
+
+
+STOP_EVENTS = {}
+
+
+def _user_stop_requested(task_id):
+    with TASKS_LOCK:
+        return bool(TASKS.get(task_id, {}).get("stop_requested"))
+
+
+def _honor_stop_decision(task_id, count, release_slot=None):
+    """Freeze the final count; never create/publish files before the decision."""
+    if not _user_stop_requested(task_id):
+        return
+    if release_slot:
+        release_slot()
+    with TASKS_LOCK:
+        event = STOP_EVENTS.setdefault(task_id, threading.Event())
+        action = TASKS.get(task_id, {}).get("stop_action")
+    if not action:
+        _set_task(task_id, status="awaiting_stop_decision", phase="paused", collected_count=count,
+                  message="توقف جمع النتائج؛ يُرجى اختيار الاحتفاظ بها أو الإلغاء النهائي. / Collection stopped; choose to retain the results or discard the search.")
+    while not action:
+        event.wait(timeout=1)
+        with TASKS_LOCK:
+            action = TASKS.get(task_id, {}).get("stop_action")
+    if action == "discard" or count == 0:
+        raise UserDiscardedSearch("Search discarded by its owner")
+    _set_task(task_id, status="processing", phase="reporting", collected_count=count)
 
 def _cleanup_task_files(user_space, safe_query="", ts="", pdf_files=None, pdf_zip=None):
     """حذف فوري لكافة الملفات الوسيطة والأبحاث وأي حزمة ZIP تم إنشاؤها عند إلغاء المهمة أو حدوث خطأ."""
@@ -1078,9 +1126,26 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
     queued_at = time.monotonic()
     max_queue_wait = bounded_env_int("SEARCH_QUEUE_MAX_SECONDS", 75, 20, 180)
     def refund_unstarted():
-        if is_guest and guest_ip and guest_fp:
+        if is_guest and guest_ip and guest_fp and not _user_stop_requested(task_id):
             refund_guest_search_quota(guest_ip, guest_fp, limit * (2 if include_abstracts or download_fulltext else 1), is_other=is_other, guest_token=guest_token)
     global PREMIUM_USERS_COUNT
+    slot_released = False
+    def release_slot():
+        nonlocal slot_released
+        global PREMIUM_USERS_COUNT
+        if slot_released:
+            return
+        slot_released = True
+        if not is_guest:
+            with PREMIUM_LOCK:
+                PREMIUM_USERS_COUNT -= 1
+                if PREMIUM_USERS_COUNT == 0:
+                    GUESTS_CAN_RUN.set()
+        else:
+            with QUEUE_LOCK:
+                ACTIVE_GUESTS.discard(task_id)
+                if task_id in GUEST_QUEUE:
+                    GUEST_QUEUE.remove(task_id)
     if not is_guest:
         with PREMIUM_LOCK:
             PREMIUM_USERS_COUNT += 1
@@ -1113,7 +1178,17 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
                         GUEST_QUEUE.remove(task_id)
                     if task_id in ACTIVE_GUESTS:
                         ACTIVE_GUESTS.remove(task_id)
-                refund_unstarted()
+                if _user_stop_requested(task_id):
+                    try:
+                        _honor_stop_decision(task_id, 0, release_slot)
+                    except UserDiscardedSearch:
+                        _set_task(task_id, status="cancelled", phase="cancelled", progress=0, papers=[], collected_count=0,
+                                  message="أُلغي البحث نهائيًا مع إبقاء الرصيد مخصومًا. / Search discarded; the charged quota is retained.")
+                    finally:
+                        CANCELLED_TASKS.discard(task_id)
+                        STOP_EVENTS.pop(task_id, None)
+                else:
+                    refund_unstarted()
                 return
 
             with QUEUE_LOCK:
@@ -1130,19 +1205,9 @@ def managed_pipeline_wrapper(query, mode, db_source, limit, affiliation, uh, tas
 
     try:
         with_abstracts = bool(include_abstracts or download_fulltext)
-        process_pipeline(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=with_abstracts, guest_ip=guest_ip, guest_fp=guest_fp, guest_token=guest_token, is_other=is_other, search_scope=search_scope, doc_type_filter=doc_type_filter, elsevier_api_key=kwargs.get("elsevier_api_key", ""), comprehensive_search=kwargs.get("comprehensive_search", False))
+        process_pipeline(query, mode, db_source, limit, affiliation, uh, task_id, require_title, year_from, year_to, include_preprint, is_guest, include_abstracts=with_abstracts, guest_ip=guest_ip, guest_fp=guest_fp, guest_token=guest_token, is_other=is_other, search_scope=search_scope, doc_type_filter=doc_type_filter, elsevier_api_key=kwargs.get("elsevier_api_key", ""), comprehensive_search=kwargs.get("comprehensive_search", False), on_collection_stopped=release_slot)
     finally:
-        if not is_guest:
-            with PREMIUM_LOCK:
-                PREMIUM_USERS_COUNT -= 1
-                if PREMIUM_USERS_COUNT == 0:
-                    GUESTS_CAN_RUN.set()
-        else:
-            with QUEUE_LOCK:
-                if task_id in ACTIVE_GUESTS:
-                    ACTIVE_GUESTS.remove(task_id)
-                elif task_id in GUEST_QUEUE:
-                    GUEST_QUEUE.remove(task_id)
+        release_slot()
 
 
 def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliation="", uh="default", task_id="", require_title=False, year_from=None, year_to=None, include_preprint=True, is_guest=False, include_abstracts=False, download_fulltext=False, guest_ip="", guest_fp="", is_other=False, search_scope="all", doc_type_filter="all", **kwargs):
@@ -1161,6 +1226,8 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
     quota_refunded = 0
     report_builder = None
     try:
+        if _user_stop_requested(task_id):
+            _honor_stop_decision(task_id, 0, kwargs.get("on_collection_stopped"))
         _check_cancelled(task_id)
         _set_task(task_id, status="processing", progress=15, message="بدء مسح وتدقيق الأبحاث عبر المحركات الأكاديمية...")
 
@@ -1400,6 +1467,9 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         provider_warnings = [info["warning"] for info in provider_diagnostics.values() if info.get("warning")]
         _set_task(task_id, provider_diagnostics=provider_diagnostics, provider_warnings=provider_warnings, finish_reason=finish_reason, abstracts_imported=abstract_imported)
         all_canonical = paper_index.get_all()
+        if kwargs.get("on_collection_stopped"):
+            kwargs["on_collection_stopped"]()
+        _honor_stop_decision(task_id, len(all_canonical))
         if not all_canonical:
             if task_id in CANCELLED_TASKS:
                 raise ValueError("تم إيقاف البحث بناءً على طلبك (لم يتم العثور على أبحاث بعد).")
@@ -1507,80 +1577,90 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         if not final_papers:
             raise ValueError("No papers remain after document-type and scope filtering; broaden filters.")
 
-        if is_guest and len(final_papers) < target_limit and guest_ip and guest_fp:
+        if is_guest and len(final_papers) < target_limit and guest_ip and guest_fp and not _user_stop_requested(task_id):
             unused_papers = target_limit - len(final_papers)
             quota_refunded = unused_papers * (2 if with_abstracts else 1)
             refund_guest_search_quota(guest_ip, guest_fp, quota_refunded, is_other=is_other, guest_token=guest_token)
+            with TASKS_LOCK:
+                charged = TASKS.get(task_id, {}).get("quota_charged_units", target_limit * (2 if with_abstracts else 1))
+            _set_task(task_id, quota_charged_units=max(0, charged - quota_refunded))
 
         pdf_files = []
         is_stopped = bool(task_id in CANCELLED_TASKS)
         status_prefix = "تم إيقاف البحث — " if is_stopped else ""
-        _set_task(task_id, phase="reporting", progress=85, message=f"{status_prefix}تم فرز {len(final_papers)} بحث — جاري توليد ملفات PDF...")
+        _set_task(task_id, phase="reporting", collected_count=len(final_papers), progress=85, message=f"{status_prefix}تم فرز {len(final_papers)} بحث — جاري توليد ملفات PDF...")
 
         if is_guest:
             _set_task(task_id, progress=90, message=f"{status_prefix}جاري إعداد وتنسيق ملف الأبحاث بصيغة PDF ({len(final_papers)} بحث)...")
             pdf_filename = f"Academic_Report_{safe_query}_{ts}.pdf"
             single_pdf_p = os.path.join(user_space, pdf_filename)
-            generate_documents(query, final_papers, single_pdf_p, None, db_source, "Academic Report", is_guest=is_guest, include_abstracts=with_abstracts, is_other=is_other)
-
-            if os.path.exists(txt_path):
-                try:
-                    os.remove(txt_path)
-                except Exception:
-                    pass
-
-            abs_pdf_path = os.path.abspath(single_pdf_p)
-            pdf_url = f"/download/{uh}/{pdf_filename}" if os.path.exists(single_pdf_p) else ""
-
-            # Save companion .json metadata file for history and preview
-            json_filename = f"Academic_Report_{safe_query}_{ts}.json"
-            json_p = os.path.join(user_space, json_filename)
             try:
-                with open(json_p, "w", encoding="utf-8") as jf:
-                    json.dump({
-                        "query": query,
-                        "timestamp": ts,
-                        "count": len(final_papers),
-                        "papers": final_papers,
-                        "filename": pdf_filename,
-                        "pdf_url": pdf_url,
-                        "download_url": pdf_url,
-                        "save_path": abs_pdf_path,
-                        "with_abstracts": with_abstracts,
-                        "user_hash": uh,
-                        "guest_ip": guest_ip,
-                        "guest_fp": guest_fp,
-                        "guest_token": guest_token,
-                        "is_guest": is_guest,
-                        "stopped": is_stopped
-                    }, jf, ensure_ascii=False)
-            except Exception as je:
-                log.warning(f"Failed to save companion JSON: {je}")
+                generate_documents(query, final_papers, single_pdf_p, None, db_source, "Academic Report", is_guest=is_guest, include_abstracts=with_abstracts, is_other=is_other)
+            except PDFWordLimitExceeded:
+                # Keep every record when an exceptional guest report also
+                # needs multiple word-limited files.
+                report_builder = ReportBuilder(user_space, query, f"{safe_query}_{ts}", db_source=db_source, include_abstracts=with_abstracts, is_other=is_other, is_guest=True)
+            else:
 
-            comp_msg = f"تم إيقاف البحث بنجاح! تم إعداد ملف الأبحاث بما تم جمعه ({len(peer)} بحث محكّم، {len(preprints)} مسودة)" if is_stopped else f"اكتمل الاستخراج بنجاح! تم إعداد ملف الأبحاث ({len(peer)} بحث محكّم، {len(preprints)} مسودة)"
-            _set_task(task_id, status="completed", progress=100,
-                      phase="completed",
-                      message=comp_msg,
-                      papers=final_papers,
-                      include_abstracts=with_abstracts,
-                      with_abstracts=with_abstracts,
-                      has_abstracts=with_abstracts,
-                      pdf_url=pdf_url,
-                      file_type="pdf",
-                      is_zip=False,
-                      filename=pdf_filename,
-                      pdf_zip="",
-                      md_url="", md_zip="",
-                      save_path=abs_pdf_path,
-                      local_path=abs_pdf_path,
-                      file_path=abs_pdf_path,
-                      user_hash=uh,
-                      guest_ip=guest_ip,
-                      guest_fp=guest_fp,
-                      guest_token=guest_token,
-                      is_guest=is_guest,
-                      counts={"peer": len(peer), "preprints": len(preprints), "batches": 1, "unlimited": False, "stopped": is_stopped})
-            return
+                if os.path.exists(txt_path):
+                    try:
+                        os.remove(txt_path)
+                    except Exception:
+                        pass
+
+                abs_pdf_path = os.path.abspath(single_pdf_p)
+                pdf_url = f"/download/{uh}/{pdf_filename}" if os.path.exists(single_pdf_p) else ""
+
+                # Save companion .json metadata file for history and preview
+                json_filename = f"Academic_Report_{safe_query}_{ts}.json"
+                json_p = os.path.join(user_space, json_filename)
+                try:
+                    with open(json_p, "w", encoding="utf-8") as jf:
+                        json.dump({
+                            "query": query,
+                            "timestamp": ts,
+                            "count": len(final_papers),
+                            "papers": final_papers,
+                            "filename": pdf_filename,
+                            "pdf_url": pdf_url,
+                            "download_url": pdf_url,
+                            "save_path": abs_pdf_path,
+                            "with_abstracts": with_abstracts,
+                            "user_hash": uh,
+                            "guest_ip": guest_ip,
+                            "guest_fp": guest_fp,
+                            "guest_token": guest_token,
+                            "is_guest": is_guest,
+                            "stopped": is_stopped
+                        }, jf, ensure_ascii=False)
+                except Exception as je:
+                    log.warning(f"Failed to save companion JSON: {je}")
+
+                _honor_stop_decision(task_id, len(final_papers))
+                comp_msg = f"تم إيقاف البحث بنجاح! تم إعداد ملف الأبحاث بما تم جمعه ({len(peer)} بحث محكّم، {len(preprints)} مسودة)" if is_stopped else f"اكتمل الاستخراج بنجاح! تم إعداد ملف الأبحاث ({len(peer)} بحث محكّم، {len(preprints)} مسودة)"
+                _set_task(task_id, status="completed", progress=100,
+                          phase="completed",
+                          message=comp_msg,
+                          papers=final_papers,
+                          include_abstracts=with_abstracts,
+                          with_abstracts=with_abstracts,
+                          has_abstracts=with_abstracts,
+                          pdf_url=pdf_url,
+                          file_type="pdf",
+                          is_zip=False,
+                          filename=pdf_filename,
+                          pdf_zip="",
+                          md_url="", md_zip="",
+                          save_path=abs_pdf_path,
+                          local_path=abs_pdf_path,
+                          file_path=abs_pdf_path,
+                          user_hash=uh,
+                          guest_ip=guest_ip,
+                          guest_fp=guest_fp,
+                          guest_token=guest_token,
+                          is_guest=is_guest,
+                          counts={"peer": len(peer), "preprints": len(preprints), "batches": 1, "unlimited": False, "stopped": is_stopped})
+                return
 
         if report_builder is None:
             report_builder = ReportBuilder(user_space, query, f"{safe_query}_{ts}", db_source=db_source, include_abstracts=with_abstracts, is_other=is_other)
@@ -1611,6 +1691,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         except Exception as e:
             log.warning(f"RIS generation failed: {e}")
 
+        _honor_stop_decision(task_id, len(final_papers))
         _set_task(task_id, progress=95, message=f"{status_prefix}ضغط {len(pdf_files)} ملف في حزمة ZIP...")
 
         # Build PDF ZIP only
@@ -1665,6 +1746,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         except Exception as je:
             log.warning(f"Failed to save companion JSON for VIP: {je}")
 
+        _honor_stop_decision(task_id, len(final_papers))
         comp_msg = f"تم إيقاف البحث بنجاح! تم إعداد ملف الأبحاث بما تم جمعه ({len(peer)} بحث محكّم، {len(preprints)} مسودة)" if is_stopped else f"اكتمل الاستخراج بنجاح! تم العثور على ({len(peer)} بحث محكّم، {len(preprints)} مسودة)"
 
         _set_task(task_id, status="completed", progress=100,
@@ -1699,14 +1781,18 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
         clean_pdf_zip = pdf_zip if 'pdf_zip' in locals() else None
         _cleanup_task_files(clean_user_space, clean_safe_query, clean_ts, clean_pdf_files, clean_pdf_zip)
 
-        if is_guest and guest_ip and guest_fp:
+        if is_guest and guest_ip and guest_fp and not _user_stop_requested(task_id):
             try:
                 refund_units = max(0, int(limit) * (2 if with_abstracts else 1) - quota_refunded)
                 refund_guest_search_quota(guest_ip, guest_fp, refund_units, is_other=is_other, guest_token=guest_token)
             except Exception:
                 pass
 
-        if is_cancelled:
+        if isinstance(e, UserDiscardedSearch):
+            _set_task(task_id, status="cancelled", phase="cancelled", progress=0,
+                      message="أُلغي البحث نهائيًا مع إبقاء الرصيد مخصومًا. / Search discarded; the charged quota is retained.",
+                      papers=[], pdf_url="", pdf_zip="", md_url="", md_zip="", save_path="", local_path="", file_path="")
+        elif is_cancelled:
             _set_task(task_id, status="error", progress=100,
                       message="تم إلغاء البحث بناءً على طلبك.",
                       error="تم إلغاء البحث بناءً على طلبك.",
@@ -1721,6 +1807,7 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
             report_builder.close()
         if task_id in CANCELLED_TASKS:
             CANCELLED_TASKS.discard(task_id)
+        STOP_EVENTS.pop(task_id, None)
 
 # ─────────────────────────────────────────────────────────────────────────
 # نقاط الـ API
@@ -2003,6 +2090,7 @@ async def start_search(
     if is_doi_query(query):
         limit = 1
     comprehensive_search = limit >= 999999
+    units_needed = 0
     with_abstracts = bool(include_abstracts or download_fulltext)
     ip, browser_fp = get_fingerprint(request)
     is_banned, ban_remaining = db_check_ip_ban(ip)
@@ -2134,7 +2222,7 @@ async def start_search(
               is_guest=is_guest, is_vip=not is_guest,
               guest_ip=ip if is_guest else "", guest_fp=browser_fp if is_guest else "",
               guest_token=clean_guest_token if is_guest else "",
-              started_at=time.time())
+              started_at=time.time(), quota_charged_units=units_needed)
     response = JSONResponse({"task_id": task_id, "user_hash": uh})
     issue_session(response, uh, secure=request.url.scheme == "https")
     threading.Thread(target=managed_pipeline_wrapper, kwargs={
@@ -2164,49 +2252,34 @@ async def start_search(
     return response
 
 @app.post("/api/cancel/{task_id}")
-async def cancel_task(task_id: str, request: Request):
+async def cancel_task(task_id: str, request: Request, action: str = Form("pause")):
     require_same_origin(request)
+    if action not in ("pause", "preserve", "discard"):
+        raise HTTPException(400, "Invalid stop action")
     task_info = TASKS.get(task_id) or db_get_task(task_id)
     if not task_info:
         raise HTTPException(404, "Task not found")
     require_owner(request, task_info.get("user_hash", ""), local=is_local_instance(request))
-    CANCELLED_TASKS.add(task_id)
-    in_q = False
-    with QUEUE_LOCK:
-        if task_id in GUEST_QUEUE:
-            GUEST_QUEUE.remove(task_id)
-            in_q = True
-        if task_id in ACTIVE_GUESTS:
-            ACTIVE_GUESTS.remove(task_id)
-
     with TASKS_LOCK:
-        task = TASKS.get(task_id, {})
-
-    curr_status = task.get("status", "")
-    if curr_status == "completed":
-        return {"status": "completed", "task_id": task_id, "preserved": True}
-
-    if curr_status == "error":
-        return {"status": "error", "task_id": task_id, "preserved": False}
-
-    has_papers = bool(task.get("papers") or task.get("collected_count"))
-    if curr_status == "queued" or in_q or not has_papers:
-        _set_task(task_id, status="error", progress=100,
-                  message="تم إلغاء البحث بناءً على طلبك.",
-                  error="تم إلغاء البحث بناءً على طلبك.",
-                  pdf_url="", pdf_zip="", md_url="", md_zip="",
-                  save_path="", local_path="", file_path="", papers=[])
-        return {"status": "cancelled", "task_id": task_id, "preserved": False}
-
-    # If running with collected papers: let process_pipeline gracefully wrap up collected papers and generate PDF
-    _set_task(task_id, progress=min(90, max(task.get("progress", 0), 80)),
-              message="تم إيقاف البحث — جاري الآن توليد وتجهيز ملف الأبحاث بما تم جمعه...")
-    return {
-        "status": "stopping",
-        "task_id": task_id,
-        "preserved": True,
-        "message": "تم إيقاف البحث — جاري الآن توليد وتجهيز ملف الأبحاث بما تم جمعه حتى الآن..."
-    }
+        task = TASKS.setdefault(task_id, dict(task_info))
+        if task.get("status") in ("completed", "error", "cancelled"):
+            return {"status": task["status"], "preserved": task["status"] == "completed", "collected_count": task.get("collected_count", len(task.get("papers") or []))}
+        previous = task.get("stop_action")
+        if action != "pause" and previous and previous != action:
+            raise HTTPException(409, "The stop decision has already been submitted")
+        patch = {"stop_requested": True, "status": "awaiting_stop_decision" if task.get("phase") == "reporting" and not previous else "stopping"}
+        if action != "pause":
+            patch["stop_action"] = action
+            patch["status"] = "stopping"
+        task.update(patch)
+        CANCELLED_TASKS.add(task_id)
+        event = STOP_EVENTS.setdefault(task_id, threading.Event())
+        result = {"status": task["status"], "collected_count": task.get("collected_count", 0),
+                  "quota_charged_units": task.get("quota_charged_units", 0), "preserved": action == "preserve"}
+    await run_in_threadpool(db_set_task, task_id, **patch)
+    if action != "pause":
+        event.set()
+    return result
 
 @app.get("/api/status/{task_id}")
 async def get_status(task_id: str, request: Request):
@@ -3633,7 +3706,7 @@ def disk_purge_loop():
                     except OSError:
                         pass
             with TASKS_LOCK:
-                stale = [tid for tid, t in TASKS.items() if t.get("status") in ("completed", "error") and t.get("_done_at", now) < now - 6 * 3600]
+                stale = [tid for tid, t in TASKS.items() if t.get("status") in ("completed", "error", "cancelled") and t.get("_done_at", now) < now - 6 * 3600]
                 for tid in stale:
                     TASKS.pop(tid, None)
         except Exception:
