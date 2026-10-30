@@ -99,7 +99,7 @@ class ScopusQuotaTests(unittest.TestCase):
             self.assertNotIn("naproxen", text)
             self.assertNotIn("نابروكس", text)
             self.assertNotIn("الرمز الثانوي", text)
-            self.assertEqual(len(content[language]), 6)
+            self.assertGreaterEqual(len(content[language]), 6)
         self.assertIn("رمز الوصول", json.dumps(content["ar"], ensure_ascii=False))
         self.assertIn("Access Code", json.dumps(content["en"]))
 

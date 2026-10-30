@@ -142,3 +142,37 @@ pip install -r requirements.txt -r requirements-guides.txt
 python scripts/build_user_guides.py
 ```
 توجد النسخ المنشورة في `static/guides/`، وتُرفع مع بقية ملفات الموقع الثابتة إلى Hugging Face.
+# Large searches and report files
+
+Comprehensive searches prepare PDF batches on the server while retrieval continues.
+Two shared worker processes use the same PDF renderers as ordinary searches; the
+queue is bounded across concurrent users. Before packaging, changed metadata or
+newly imported abstracts invalidate and rebuild the affected batch.
+
+Reports contain at most 100 records with abstracts (250 without); PDF indexes
+contain at most 250 records per part. The ZIP includes all parts, a complete
+UTF-8 CSV index, a JSON manifest and an offline HTML file guide. No records are
+discarded to meet a per-file limit. Optional `REPORT_BATCH_SIZE` and
+`REPORT_INDEX_BATCH_SIZE` settings are bounded to 25–250 records. Existing
+archives remain unchanged; the new format applies to new searches.
+
+Missing or explicitly truncated abstracts are enriched in identifier-verified
+batches from PubMed, Europe PMC and OpenAlex during collection, within the
+search deadline and an eight-second per-round fallback budget. Fallbacks share
+provider cooldowns and use no automatic HTTP retries or personal Scopus quota.
+Abstracts unavailable from responding sources remain unavailable; the system
+does not synthesize abstracts. Structured abstract sections and complete text
+are retained in PDF, CSV, BibTeX and RIS exports. Browser results render 50
+records per page while filtering still searches the entire result set.
+
+Every generated PDF enforces a hard ceiling of 500,000 displayed words, including
+headings, repeated page elements and metadata. Oversized batches split only
+between complete records. A single source that cannot fit is retained intact
+in one UTF-8 text file with an explicit manifest notice, never in PDF fragments.
+
+Stopping freezes retrieval and displays the acknowledged final count. The owner
+chooses to retain results and generate reports, or discard the results and
+temporary files. The charged allowance is retained for both user-requested
+actions, including cancellation before retrieval. Normal completion and system
+failures retain their existing reconciliation policy. Waiting for the decision
+releases the retrieval slot and does not block other users' searches.

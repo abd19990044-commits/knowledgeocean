@@ -162,7 +162,11 @@ def safe_get(engine_name: str, url: str, task_id: Optional[str] = None, is_guest
     """
     circuit_key = kwargs.pop("circuit_key", engine_name)
     quota_aware = kwargs.pop("quota_aware", False)
-    if _task_stopped(task_id):
+    request_deadline = kwargs.pop("request_deadline", None)
+    http_session = kwargs.pop("http_session", HTTP)
+    def stopped():
+        return _task_stopped(task_id) or (request_deadline is not None and time.monotonic() >= request_deadline)
+    if stopped():
         return None
 
     # Check circuit breaker
@@ -170,7 +174,7 @@ def safe_get(engine_name: str, url: str, task_id: Optional[str] = None, is_guest
         return None
 
     while is_guest and not GUESTS_CAN_RUN.is_set():
-        if _task_stopped(task_id):
+        if stopped():
             return None
         if task_id:
             with TASKS_LOCK:
@@ -182,7 +186,7 @@ def safe_get(engine_name: str, url: str, task_id: Optional[str] = None, is_guest
                 if task_id in TASKS:
                     TASKS[task_id].update({"status": "processing", "message": "جاري استئناف البحث بعد انتهاء مستخدم الـ VIP..."})
 
-    if _task_stopped(task_id):
+    if stopped():
         return None
 
     lock = ENGINE_LOCKS.get(engine_name)
@@ -190,12 +194,16 @@ def safe_get(engine_name: str, url: str, task_id: Optional[str] = None, is_guest
 
     if lock:
         while not lock.acquire(timeout=0.2):
-            if _task_stopped(task_id):
+            if stopped():
                 return None
     try:
-        if _task_stopped(task_id) or is_engine_in_cooldown(circuit_key):
+        if stopped() or is_engine_in_cooldown(circuit_key):
             return None
-        res = HTTP.get(url, **kwargs)
+        if request_deadline is not None:
+            remaining = max(0.05, request_deadline - time.monotonic())
+            requested = kwargs.get("timeout", remaining)
+            kwargs["timeout"] = tuple(min(part, remaining) for part in requested) if isinstance(requested, tuple) else min(requested, remaining)
+        res = http_session.get(url, **kwargs)
         if task_id and task_id in CANCELLED_TASKS:
             return None
         if quota_aware and _scopus_quota_cooldown(res, circuit_key):
@@ -212,7 +220,7 @@ def safe_get(engine_name: str, url: str, task_id: Optional[str] = None, is_guest
             trip_engine_circuit(circuit_key, cooldown_seconds=30.0, reason=f"HTTP {res.status_code} Server Error")
 
         if lock and not (task_id and task_id in CANCELLED_TASKS):
-            time.sleep(delay)
+            time.sleep(min(delay, max(0, request_deadline - time.monotonic())) if request_deadline is not None else delay)
         return res
     except (requests.exceptions.Timeout, requests.exceptions.ConnectTimeout, requests.exceptions.ReadTimeout):
         trip_engine_circuit(circuit_key, cooldown_seconds=20.0, reason="Request Timeout")

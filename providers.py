@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 
 from models import CanonicalPaper, is_preprint_record
+from abstracts import inverted_abstract
 from identifiers import normalize_doi, extract_doi, is_doi_query
 from network import (
     CANCELLED_TASKS,
@@ -198,7 +199,7 @@ def fetch_pubmed_batch(keywords: str, state: dict, mode: str, affiliation: str, 
                 t_el = art.find('.//ArticleTitle')
                 title = ''.join(t_el.itertext()).strip() if t_el is not None else "No Title"
                 abs_parts = [f"{a.get('Label', '')}: {''.join(a.itertext()).strip()}" if a.get('Label', '') else ''.join(a.itertext()).strip() for a in art.findall('.//AbstractText') if ''.join(a.itertext()).strip()]
-                abs_text = " ".join(abs_parts) if abs_parts else ""
+                abs_text = "\n\n".join(abs_parts) if abs_parts else ""
                 year = art.findtext('.//PubDate/Year', '0000')
                 if year == '0000':
                     m = re.search(r'(\d{4})', art.findtext('.//PubDate/MedlineDate', '') or '')
@@ -324,7 +325,7 @@ def fetch_openalex_batch(keywords: str, state: dict, mode: str, affiliation: str
             if res and res.status_code == 200:
                 item = res.json()
                 inv = item.get("abstract_inverted_index")
-                abs_text = " ".join(w for _, w in sorted((pos, word) for word, poss in inv.items() for pos in poss)) if inv else ""
+                abs_text = inverted_abstract(inv)
                 authors = [a.get("author", {}).get("display_name", "").strip() for a in item.get("authorships", []) if a.get("author", {}).get("display_name", "").strip()]
                 loc = item.get("primary_location") or {}
                 source = (loc.get("source") or {}) if isinstance(loc, dict) else {}
@@ -381,7 +382,7 @@ def fetch_openalex_batch(keywords: str, state: dict, mode: str, affiliation: str
             results = res.json().get("results", [])
             for item in results:
                 inv = item.get("abstract_inverted_index")
-                abs_text = " ".join(w for _, w in sorted((pos, word) for word, poss in inv.items() for pos in poss)) if inv else ""
+                abs_text = inverted_abstract(inv)
                 authors = [a.get("author", {}).get("display_name", "").strip() for a in item.get("authorships", []) if a.get("author", {}).get("display_name", "").strip()]
                 loc = item.get("primary_location") or {}
                 source = (loc.get("source") or {}) if isinstance(loc, dict) else {}
