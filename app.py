@@ -1441,6 +1441,10 @@ def process_pipeline(query, mode="keyword", db_source="all", limit=10, affiliati
 
         final_canonical = filtered_canonical[:target_limit] if not unlimited else filtered_canonical
         final_papers = [p.to_dict() for p in final_canonical]
+        for paper in final_papers:
+            paper["apa"] = format_apa_7th(paper)
+            paper["apa_html"] = format_apa_7th_html(paper)
+            paper["apa_plain"] = format_apa_7th_plain(paper)
         if not with_abstracts:
             for p_dict in final_papers:
                 p_dict['abstract'] = ""
@@ -2551,8 +2555,8 @@ async def api_doi_lookup(request: Request, doi: str = Form(None), password: str 
     paper_data["journal"] = clean_journal_name(paper_data["journal"])
     paper_data["authors"] = [a.strip() for a in paper_data["authors"] if a and a.strip() and a.strip().lower() not in ("unknown", "unknown authors", "et al", "et al.")]
 
-    paper_data["apa"] = format_apa_7th(paper_data, bold_volume=True)
-    paper_data["apa_html"] = format_apa_7th_html(paper_data, bold_volume=True)
+    paper_data["apa"] = format_apa_7th(paper_data)
+    paper_data["apa_html"] = format_apa_7th_html(paper_data)
     paper_data["apa_plain"] = format_apa_7th_plain(paper_data)
     paper_data["bibtex"] = generate_bibtex_entry(paper_data, index=1)
     paper_data["bibtex_download_url"] = f"/api/download-bibtex?doi={urllib.parse.quote(clean_doi)}"
@@ -3159,8 +3163,9 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
             item["doi_url"] = item.get("oa_url") or item.get("url") or ""
         item["apa"] = format_strict_apa_7th(item)
         if item["apa"]:
-            item["apa_html"] = apa_to_html(item["apa"])
-            item["apa_plain"] = apa_to_plain(item["apa"])
+            item["apa"] = format_apa_7th(item)
+            item["apa_html"] = format_apa_7th_html(item)
+            item["apa_plain"] = format_apa_7th_plain(item)
 
     norm_target = normalize_title_for_matching(clean_t)
     def _rank_key(x):

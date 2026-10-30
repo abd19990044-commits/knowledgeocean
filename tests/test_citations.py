@@ -49,7 +49,7 @@ class TestCitations(unittest.TestCase):
         self.assertIn("DFT", s2)
         self.assertIn("ORCA", s2)
 
-    def test_format_apa_7th_volume_bold_and_no_double_dots(self):
+    def test_format_apa_7th_volume_italic_and_no_double_dots(self):
         paper = {
             "title": "Study of NaCl adsorption using DFT in Mosul.",
             "authors": ["Boyka Tsvetkova", "Lily Peikova"],
@@ -62,7 +62,8 @@ class TestCitations(unittest.TestCase):
         }
         apa = citations.format_apa_7th(paper)
         self.assertNotIn("..", apa)
-        self.assertIn("**62**", apa)
+        self.assertIn("*62*", apa)
+        self.assertNotIn("**62**", apa)
         self.assertIn("*Pharmacia*", apa)
         self.assertIn("(3)", apa)
         self.assertIn("15–19", apa)
@@ -82,7 +83,7 @@ class TestCitations(unittest.TestCase):
             "doi": "10.1038/s41586-020-2012-7"
         }
         apa1 = citations.format_apa_7th(paper1)
-        self.assertIn("*Nature*, **579**(7798), 270–273.", apa1)
+        self.assertIn("*Nature*, *579*(7798), 270–273.", apa1)
         self.assertNotIn("Vol.", apa1)
         self.assertNotIn("pp.", apa1)
 
@@ -96,7 +97,7 @@ class TestCitations(unittest.TestCase):
             "pages": "120-129"
         }
         apa2 = citations.format_apa_7th(paper2)
-        self.assertIn("*Journal of Chromatography A*, **1498**, 120–129.", apa2)
+        self.assertIn("*Journal of Chromatography A*, *1498*, 120–129.", apa2)
 
         # Test issue without volume
         paper3 = {
@@ -134,12 +135,13 @@ class TestCitations(unittest.TestCase):
             "pages": "164-165",
             "doi": "10.4103/ijpc.ijpc_143_18"
         }
-        apa_html = citations.format_apa_7th_html(paper, bold_volume=True)
+        apa_html = citations.format_apa_7th_html(paper)
         self.assertNotIn("*", apa_html)
         self.assertIn('font-family: \'Times New Roman\', Times, serif;', apa_html)
         self.assertIn('font-size: 14pt;', apa_html)
         self.assertIn('<i style="font-style: italic;">Indian Journal of Palliative Care</i>', apa_html)
-        self.assertIn('<b style="font-weight: bold;">25</b>(1)', apa_html)
+        self.assertIn('<i style="font-style: italic;">25</i>(1)', apa_html)
+        self.assertNotIn('<b', apa_html)
         self.assertIn('164–165.', apa_html)
         self.assertIn('https://doi.org/10.4103/ijpc.ijpc_143_18', apa_html)
 

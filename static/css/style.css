@@ -20,6 +20,13 @@ html, body {
   box-sizing: border-box;
 }
 
+/* Citations permit a native partial selection on desktop and touch screens. */
+.citation-text,
+.citation-text * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
 /* Smooth Touch Interactions & Fast Click Handling for Mobile Phones */
 button, a, input, select, textarea {
   touch-action: manipulation;

@@ -91,6 +91,9 @@ class PipelineBudgetTests(unittest.TestCase):
         self.assertEqual(len(task["papers"]), 7)
         self.assertEqual(task["search_budget_seconds"], 70)
         self.assertEqual(task["finish_reason"], "target_reached")
+        self.assertIn("Author, T.", task["papers"][0]["apa"])
+        self.assertIn("Test Journal", task["papers"][0]["apa_html"])
+        self.assertNotIn("<b", task["papers"][0]["apa_html"])
 
     def test_comprehensive_budget_does_not_bypass_result_quota(self):
         task, calls = self.run_pipeline(limit=3, step=1, comprehensive=True)
