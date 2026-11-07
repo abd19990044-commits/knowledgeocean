@@ -43,6 +43,38 @@ class PersonalScopusTests(unittest.TestCase):
             self.assertEqual(len(providers.fetch_elsevier_batch("climate", {}, "keyword", "", "", False, 5)), 1)
             self.assertEqual(get.call_args.kwargs["headers"]["X-ELS-APIKey"], KEY)
 
+    def test_hf_secret_copy_wrappers_are_removed_before_transmission(self):
+        for raw in ('"' + KEY + '"', "'" + KEY + "'", '\ufeff“' + KEY + '”\u200f', '\n ' + KEY + ' \n'):
+            with self.subTest(wrapper_type=type(raw).__name__), patch.dict(os.environ, {"ELSEVIER_API_KEY": raw}), patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=response()) as get:
+                state = {}
+                providers.fetch_elsevier_batch("graphene", state, "keyword", "", "", False, 5)
+                self.assertEqual(get.call_args.kwargs["headers"]["X-ELS-APIKey"], KEY)
+                self.assertEqual(state["credential_source"], "platform_secret")
+                self.assertNotIn(KEY, json.dumps(state))
+
+    def test_hf_runtime_secret_takes_precedence_over_imported_snapshot(self):
+        with patch.dict(os.environ, {"ELSEVIER_API_KEY": KEY}), patch.object(providers, "ELSEVIER_API_KEY", "OLD_IMPORTED_SNAPSHOT"), patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=response()) as get:
+            providers.fetch_elsevier_batch("graphene", {}, "keyword", "", "", False, 5)
+            self.assertEqual(get.call_args.kwargs["headers"]["X-ELS-APIKey"], KEY)
+
+    def test_invalid_hf_secret_format_is_not_sent_or_exposed(self):
+        with patch.dict(os.environ, {"ELSEVIER_API_KEY": "ELSEVIER_API_KEY=" + KEY}), patch.object(providers, "safe_get") as get:
+            state = {}
+            providers.fetch_elsevier_batch("graphene", state, "keyword", "", "", False, 5)
+            self.assertEqual(state["provider_status"], "invalid_key_format")
+            self.assertIn("Key source: server secret ELSEVIER_API_KEY", state["warning"])
+            self.assertNotIn(KEY, json.dumps(state))
+            get.assert_not_called()
+
+    def test_personal_key_rejection_identifies_browser_source(self):
+        with patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=response(401)):
+            state = {}
+            providers.fetch_elsevier_batch("graphene", state, "keyword", "", "", True, 5, api_key=KEY)
+            self.assertEqual(state["credential_source"], "personal")
+            self.assertIn("Key source: personal browser key", state["warning"])
+            self.assertNotIn("Key source: server secret", state["warning"])
+            self.assertNotIn(KEY, json.dumps(state))
+
     def test_vip_missing_platform_key_stops_with_actionable_notice(self):
         with patch.dict(os.environ, {"ELSEVIER_API_KEY": ""}), patch.object(providers, "ELSEVIER_API_KEY", ""), patch.object(providers, "safe_get") as get:
             state = {}

@@ -776,6 +776,15 @@ def fetch_openlibrary_batch(keywords: str, state: dict, mode: str, affiliation: 
 SCOPUS_CITATION_FIELDS = "identifier,eid,title,creator,doi,coverDate,publicationName"
 
 
+def _normalize_elsevier_key(value: str) -> str:
+    """Remove copy/paste wrappers, preserving the credential's actual content."""
+    key = (value or "").strip().strip("\ufeff\u200b\u200e\u200f").strip()
+    quote_pairs = {'"': '"', "'": "'", "“": "”", "‘": "’"}
+    if len(key) >= 2 and quote_pairs.get(key[0]) == key[-1]:
+        key = key[1:-1].strip()
+    return key
+
+
 def _scopus_error_code(response) -> str:
     """Return only known provider codes, never raw messages that may echo a key."""
     allowed = {"AUTHENTICATION_ERROR", "AUTHORIZATION_ERROR", "APIKEY_INVALID",
@@ -798,13 +807,14 @@ def _scopus_error_code(response) -> str:
 def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str, task_id: str, is_guest: bool, batch_size: int, *, api_key: Optional[str] = None) -> List[CanonicalPaper]:
     if is_task_cancelled(task_id):
         return []
-    personal_key = (api_key or "").strip()
+    personal_key = _normalize_elsevier_key(api_key)
     if is_guest and not personal_key:
         state['exhausted'] = True
         return []
     api_key = personal_key
     if not api_key and not is_guest:
-        api_key = os.environ.get("ELSEVIER_API_KEY", "").strip() or ELSEVIER_API_KEY
+        api_key = _normalize_elsevier_key(os.environ.get("ELSEVIER_API_KEY", "")) or _normalize_elsevier_key(ELSEVIER_API_KEY)
+    state["credential_source"] = "personal" if personal_key else "platform_secret"
     papers = []
     clean_k = keywords.strip()
     query = f'AUTH("{clean_k.replace(chr(34), "")}")' if mode == "author" else f'TITLE-ABS-KEY({clean_k})'
@@ -814,6 +824,7 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
     def stop_with_notice(status, response=None):
         notices = {
             "not_configured": "Scopus: لم يُضبط مفتاح Elsevier للمنصة. أضف مفتاحك الشخصي من نافذة تسجيل الدخول أو اضبط مفتاح الخادم. / No platform Elsevier key is configured. Add your personal key in Sign In or configure the server key.",
+            "invalid_key_format": "Scopus: صيغة المفتاح المهيأ غير مقبولة؛ لم يُرسل أي طلب إلى المزود. تحقق من حفظ قيمة مفتاح API وحدها، دون اسم المتغير أو رابط. / The configured key has an unsupported format; no request was sent. Store the API key value alone, without a variable name or URL.",
             "authentication_failed": "Scopus: لم يقبل المزود مصادقة هذا الطلب. لا يعني ذلك بالضرورة أن المفتاح غير صحيح؛ راجع إعدادات المفتاح وقيود التطبيق في Elsevier. / Elsevier did not authenticate this request. This does not necessarily mean the key is invalid; review its application settings and restrictions.",
             "access_denied": "Scopus: رفض المزود الوصول إلى البحث رغم طلب بيانات الاستشهاد الأساسية فقط. قد يكون المفتاح صحيحاً، لكن صلاحيات الحساب أو إعدادات التطبيق لا تسمح بهذا الطلب. / Elsevier denied search access with basic citation fields only. The key may be valid, but account entitlements or application settings do not permit this request.",
             "invalid_query": "Scopus: لم يقبل المزود صياغة الاستعلام؛ راجع مصطلحات البحث والمعاملات المنطقية. / Elsevier rejected the query syntax; review the search terms and Boolean operators.",
@@ -822,6 +833,8 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
             "unavailable": "Scopus: تعذر الاتصال بالمزود حالياً؛ حاول لاحقاً. / Provider temporarily unavailable; try later.",
         }
         warning = notices[status]
+        warning += (" مصدر المفتاح: المفتاح الشخصي في المتصفح. / Key source: personal browser key."
+                    if personal_key else " مصدر المفتاح: سر الخادم ELSEVIER_API_KEY. / Key source: server secret ELSEVIER_API_KEY.")
         if response is not None:
             # HTTP status and an allowlisted code are sufficient for support;
             # never persist the response body, URL, headers, or credentials.
@@ -831,6 +844,8 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
         return []
     if not api_key:
         return stop_with_notice("not_configured")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,256}", api_key):
+        return stop_with_notice("invalid_key_format")
     cooldown = get_engine_circuit_status(circuit_key)
     if cooldown:
         reason = cooldown.get("reason", "")
