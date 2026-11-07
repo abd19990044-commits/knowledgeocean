@@ -770,6 +770,31 @@ def fetch_openlibrary_batch(keywords: str, state: dict, mode: str, affiliation: 
     return papers
 
 
+# Only bibliographic fields from STANDARD, for every account tier. No COMPLETE
+# fields (abstracts, author lists, funding), institutional token, or cursor.
+# The documented `field` parameter overrides the view's full response field set.
+SCOPUS_CITATION_FIELDS = "identifier,eid,title,creator,doi,coverDate,publicationName"
+
+
+def _scopus_error_code(response) -> str:
+    """Return only known provider codes, never raw messages that may echo a key."""
+    allowed = {"AUTHENTICATION_ERROR", "AUTHORIZATION_ERROR", "APIKEY_INVALID",
+               "INVALID_APIKEY", "API_KEY_INVALID", "QUOTA_EXCEEDED",
+               "RATE_LIMIT_EXCEEDED", "INVALID_INPUT", "INVALID_QUERY", "INVALID_REQUEST"}
+    candidates = [response.headers.get("X-ELS-Status", "")]
+    try:
+        payload = response.json()
+        candidates.extend([payload.get("service-error", {}).get("status", {}).get("statusCode", ""),
+                           payload.get("error-response", {}).get("error-code", "")])
+    except (ValueError, TypeError, AttributeError):
+        pass
+    for candidate in candidates:
+        code = str(candidate).split(" - ", 1)[0].strip().upper()
+        if code in allowed:
+            return code
+    return ""
+
+
 def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str, task_id: str, is_guest: bool, batch_size: int, *, api_key: Optional[str] = None) -> List[CanonicalPaper]:
     if is_task_cancelled(task_id):
         return []
@@ -786,22 +811,30 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
     if mode == "author" and affiliation:
         query += f' AND AFFIL("{affiliation}")'
     circuit_key = "elsevier:" + hashlib.sha256(api_key.encode()).hexdigest()
-    def stop_with_notice(status):
+    def stop_with_notice(status, response=None):
         notices = {
             "not_configured": "Scopus: لم يُضبط مفتاح Elsevier للمنصة. أضف مفتاحك الشخصي من نافذة تسجيل الدخول أو اضبط مفتاح الخادم. / No platform Elsevier key is configured. Add your personal key in Sign In or configure the server key.",
-            "access_denied": "Scopus: المفتاح لا يمنح صلاحية البحث المطلوبة؛ تحقق من تفعيل Scopus في حساب Elsevier. / This key lacks Scopus search access; check its Elsevier entitlements.",
+            "authentication_failed": "Scopus: لم يقبل المزود مصادقة هذا الطلب. لا يعني ذلك بالضرورة أن المفتاح غير صحيح؛ راجع إعدادات المفتاح وقيود التطبيق في Elsevier. / Elsevier did not authenticate this request. This does not necessarily mean the key is invalid; review its application settings and restrictions.",
+            "access_denied": "Scopus: رفض المزود الوصول إلى البحث رغم طلب بيانات الاستشهاد الأساسية فقط. قد يكون المفتاح صحيحاً، لكن صلاحيات الحساب أو إعدادات التطبيق لا تسمح بهذا الطلب. / Elsevier denied search access with basic citation fields only. The key may be valid, but account entitlements or application settings do not permit this request.",
+            "invalid_query": "Scopus: لم يقبل المزود صياغة الاستعلام؛ راجع مصطلحات البحث والمعاملات المنطقية. / Elsevier rejected the query syntax; review the search terms and Boolean operators.",
             "quota_exceeded": "Scopus: نفدت حصة مفتاح Elsevier؛ تتوقف الطلبات حتى موعد التجديد. / The key's quota is exhausted; requests pause until reset.",
             "rate_limited": "Scopus: تم بلوغ حد الطلبات؛ أُوقفت المحاولات مؤقتاً وفق حدود المزود. / Request rate limit reached; calls are paused according to provider limits.",
             "unavailable": "Scopus: تعذر الاتصال بالمزود حالياً؛ حاول لاحقاً. / Provider temporarily unavailable; try later.",
         }
-        state.update(exhausted=True, provider_status=status, warning=notices[status])
+        warning = notices[status]
+        if response is not None:
+            # HTTP status and an allowlisted code are sufficient for support;
+            # never persist the response body, URL, headers, or credentials.
+            code = _scopus_error_code(response)
+            warning += f" [HTTP {response.status_code}" + (f"; {code}" if code else "") + "]"
+        state.update(exhausted=True, provider_status=status, warning=warning)
         return []
     if not api_key:
         return stop_with_notice("not_configured")
     cooldown = get_engine_circuit_status(circuit_key)
     if cooldown:
         reason = cooldown.get("reason", "")
-        return stop_with_notice("quota_exceeded" if "quota" in reason.lower() else "access_denied" if "401" in reason or "403" in reason else "rate_limited" if "429" in reason else "unavailable")
+        return stop_with_notice("quota_exceeded" if "quota" in reason.lower() else "authentication_failed" if "401" in reason else "access_denied" if "403" in reason else "rate_limited" if "429" in reason else "unavailable")
     start = max(0, int(state.get('offset', 0)))
     req_count = min(25, max(1, int(batch_size)), 5000 - start)
     if req_count <= 0:
@@ -811,15 +844,23 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
         res = safe_get('elsevier', "https://api.elsevier.com/content/search/scopus", task_id, is_guest,
                        headers={"X-ELS-APIKey": api_key, "Accept": "application/json"},
                        circuit_key=circuit_key, quota_aware=True,
-                       params={"query": query, "view": "STANDARD", "count": req_count, "start": start}, timeout=15)
+                       params={"query": query, "view": "STANDARD", "field": SCOPUS_CITATION_FIELDS,
+                               "count": req_count, "start": start}, timeout=15)
         if res is None:
             return stop_with_notice("unavailable")
-        if res.status_code in (401, 403):
-            return stop_with_notice("access_denied")
+        if res.status_code == 401:
+            return stop_with_notice("authentication_failed", res)
+        if res.status_code == 403:
+            return stop_with_notice("access_denied", res)
+        if res.status_code == 400:
+            return stop_with_notice("invalid_query", res)
         if res.status_code == 429:
-            return stop_with_notice("quota_exceeded" if "QUOTA_EXCEEDED" in str(res.headers.get("X-ELS-Status", "")).upper() else "rate_limited")
+            return stop_with_notice("quota_exceeded" if _scopus_error_code(res) == "QUOTA_EXCEEDED" else "rate_limited", res)
         if res.status_code == 200:
-            result = res.json().get("search-results", {})
+            payload = res.json()
+            if "search-results" not in payload:
+                return stop_with_notice("unavailable", res)
+            result = payload["search-results"]
             raw_entries = result.get("entry") or []
             if isinstance(raw_entries, dict):
                 raw_entries = [raw_entries]
@@ -845,9 +886,9 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
             if str(res.headers.get("X-RateLimit-Remaining", "")).strip() == "0":
                 stop_with_notice("quota_exceeded")
         else:
-            return stop_with_notice("unavailable")
+            return stop_with_notice("unavailable", res)
     except Exception as e:
-        log.warning(f"Scopus batch error: {e}")
+        log.warning("Scopus batch error: %s", type(e).__name__)
         return stop_with_notice("unavailable")
     return papers
 

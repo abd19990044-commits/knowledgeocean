@@ -99,7 +99,10 @@ class PersonalScopusTests(unittest.TestCase):
             self.assertEqual(len(papers), 25)
             self.assertEqual(papers[0].authors, ["Smith, J."])
             self.assertEqual(papers[0].publisher, "")
-            self.assertEqual(get.call_args.kwargs["params"], {"query": "TITLE-ABS-KEY(climate)", "view": "STANDARD", "count": 25, "start": 0})
+            self.assertEqual(get.call_args.kwargs["params"], {"query": "TITLE-ABS-KEY(climate)", "view": "STANDARD", "field": providers.SCOPUS_CITATION_FIELDS, "count": 25, "start": 0})
+            self.assertNotIn("description", get.call_args.kwargs["params"]["field"])
+            self.assertNotIn("cursor", get.call_args.kwargs["params"])
+            self.assertNotIn("X-ELS-Insttoken", get.call_args.kwargs["headers"])
             self.assertEqual(get.call_args.kwargs["headers"]["X-ELS-APIKey"], KEY)
             self.assertEqual(state["offset"], 25)
             self.assertNotIn(KEY, json.dumps(state))
@@ -115,6 +118,58 @@ class PersonalScopusTests(unittest.TestCase):
             self.assertNotIn(KEY, state["warning"])
             self.assertEqual(get.call_count, 1)
             self.assertEqual(get.call_args.kwargs["headers"]["X-ELS-APIKey"], KEY)
+
+    def test_free_platform_and_personal_keys_use_same_minimal_request(self):
+        calls = []
+        with patch.dict(os.environ, {"ELSEVIER_API_KEY": KEY}), patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=response()) as get:
+            for guest, key in ((False, None), (True, KEY), (False, KEY)):
+                providers.fetch_elsevier_batch("energy", {}, "keyword", "", "", guest, 250, api_key=key)
+                calls.append(get.call_args.kwargs)
+        self.assertEqual(calls[0], calls[1])
+        self.assertEqual(calls[1], calls[2])
+        self.assertEqual(calls[0]["params"]["field"], "identifier,eid,title,creator,doi,coverDate,publicationName")
+
+    def test_authentication_error_is_not_reported_as_missing_entitlements(self):
+        result = response(401, {"service-error": {"status": {"statusCode": "AUTHENTICATION_ERROR", "statusText": "sensitive " + KEY}}})
+        with patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=result) as get:
+            state = {}
+            self.assertEqual(providers.fetch_elsevier_batch("energy", state, "keyword", "", "", True, 5, api_key=KEY), [])
+            self.assertEqual(state["provider_status"], "authentication_failed")
+            self.assertIn("HTTP 401; AUTHENTICATION_ERROR", state["warning"])
+            self.assertNotIn(KEY, json.dumps(state))
+            self.assertEqual(get.call_count, 1)
+
+    def test_forbidden_free_search_retains_safe_error_code(self):
+        result = response(403, {"error-response": {"error-code": "AUTHORIZATION_ERROR", "error-message": KEY}})
+        with patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=result):
+            state = {}
+            providers.fetch_elsevier_batch("energy", state, "keyword", "", "", True, 5, api_key=KEY)
+            self.assertEqual(state["provider_status"], "access_denied")
+            self.assertIn("HTTP 403; AUTHORIZATION_ERROR", state["warning"])
+            self.assertIn("key may be valid", state["warning"])
+            self.assertNotIn(KEY, json.dumps(state))
+
+    def test_error_details_are_allowlisted_and_not_echoed(self):
+        result = response(400, {"error-response": {"error-code": KEY, "error-message": KEY}}, {"X-ELS-Status": KEY})
+        with patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=result):
+            state = {}
+            providers.fetch_elsevier_batch("energy", state, "keyword", "", "", True, 5, api_key=KEY)
+            self.assertEqual(state["provider_status"], "invalid_query")
+            self.assertIn("HTTP 400", state["warning"])
+            self.assertNotIn(KEY, json.dumps(state))
+
+    def test_authentication_cooldown_is_distinct_from_forbidden(self):
+        with patch.object(providers, "get_engine_circuit_status", return_value={"reason": "HTTP 401 Auth/Forbidden"}), patch.object(providers, "safe_get") as get:
+            state = {}
+            providers.fetch_elsevier_batch("energy", state, "keyword", "", "", True, 5, api_key=KEY)
+            self.assertEqual(state["provider_status"], "authentication_failed")
+            get.assert_not_called()
+
+    def test_missing_search_payload_is_not_a_successful_empty_search(self):
+        with patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=response(200, {"unexpected": "response"})):
+            state = {}
+            providers.fetch_elsevier_batch("energy", state, "keyword", "", "", True, 5, api_key=KEY)
+            self.assertEqual(state["provider_status"], "unavailable")
 
     def test_basic_single_record_object_is_supported(self):
         result = response(payload={"search-results": {"entry": {"dc:title": "Digital archives", "prism:doi": "10.1000/archive"}, "opensearch:totalResults": "1"}})
