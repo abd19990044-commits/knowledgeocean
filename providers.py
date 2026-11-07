@@ -6,6 +6,7 @@ Supports exact DOI routing, pagination, and circuit breaker resilience.
 """
 
 import re
+import os
 import hashlib
 import logging
 import xml.etree.ElementTree as ET
@@ -779,9 +780,6 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
     api_key = personal_key
     if not api_key and not is_guest:
         api_key = os.environ.get("ELSEVIER_API_KEY", "").strip() or ELSEVIER_API_KEY
-    if not api_key:
-        state['exhausted'] = True
-        return []
     papers = []
     clean_k = keywords.strip()
     query = f'AUTH("{clean_k.replace(chr(34), "")}")' if mode == "author" else f'TITLE-ABS-KEY({clean_k})'
@@ -790,6 +788,7 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
     circuit_key = "elsevier:" + hashlib.sha256(api_key.encode()).hexdigest()
     def stop_with_notice(status):
         notices = {
+            "not_configured": "Scopus: لم يُضبط مفتاح Elsevier للمنصة. أضف مفتاحك الشخصي من نافذة تسجيل الدخول أو اضبط مفتاح الخادم. / No platform Elsevier key is configured. Add your personal key in Sign In or configure the server key.",
             "access_denied": "Scopus: المفتاح لا يمنح صلاحية البحث المطلوبة؛ تحقق من تفعيل Scopus في حساب Elsevier. / This key lacks Scopus search access; check its Elsevier entitlements.",
             "quota_exceeded": "Scopus: نفدت حصة مفتاح Elsevier؛ تتوقف الطلبات حتى موعد التجديد. / The key's quota is exhausted; requests pause until reset.",
             "rate_limited": "Scopus: تم بلوغ حد الطلبات؛ أُوقفت المحاولات مؤقتاً وفق حدود المزود. / Request rate limit reached; calls are paused according to provider limits.",
@@ -797,6 +796,8 @@ def fetch_elsevier_batch(keywords: str, state: dict, mode: str, affiliation: str
         }
         state.update(exhausted=True, provider_status=status, warning=notices[status])
         return []
+    if not api_key:
+        return stop_with_notice("not_configured")
     cooldown = get_engine_circuit_status(circuit_key)
     if cooldown:
         reason = cooldown.get("reason", "")

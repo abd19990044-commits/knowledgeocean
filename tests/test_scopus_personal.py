@@ -26,6 +26,65 @@ def response(status=200, payload=None, headers=None):
 
 
 class PersonalScopusTests(unittest.TestCase):
+    def test_vip_uses_platform_environment_key_without_personal_key(self):
+        result = response(payload={"search-results": {"entry": [{"dc:title": "Graphene research", "prism:doi": "10.1000/graphene"}], "opensearch:totalResults": "1"}})
+        with patch.dict(os.environ, {"ELSEVIER_API_KEY": KEY}), patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=result) as get:
+            state = {}
+            papers = providers.fetch_elsevier_batch("graphene", state, "keyword", "", "", False, 5)
+            self.assertEqual(len(papers), 1)
+            self.assertEqual(papers[0].doi, "10.1000/graphene")
+            self.assertEqual(get.call_args.kwargs["headers"]["X-ELS-APIKey"], KEY)
+            self.assertEqual(get.call_args.kwargs["params"]["view"], "STANDARD")
+            self.assertNotIn(KEY, json.dumps(state))
+
+    def test_vip_can_use_loaded_platform_key(self):
+        result = response(payload={"search-results": {"entry": [{"dc:title": "Climate research"}]}})
+        with patch.dict(os.environ, {"ELSEVIER_API_KEY": ""}), patch.object(providers, "ELSEVIER_API_KEY", KEY), patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=result) as get:
+            self.assertEqual(len(providers.fetch_elsevier_batch("climate", {}, "keyword", "", "", False, 5)), 1)
+            self.assertEqual(get.call_args.kwargs["headers"]["X-ELS-APIKey"], KEY)
+
+    def test_vip_missing_platform_key_stops_with_actionable_notice(self):
+        with patch.dict(os.environ, {"ELSEVIER_API_KEY": ""}), patch.object(providers, "ELSEVIER_API_KEY", ""), patch.object(providers, "safe_get") as get:
+            state = {}
+            self.assertEqual(providers.fetch_elsevier_batch("graphene", state, "keyword", "", "", False, 5), [])
+            self.assertTrue(state["exhausted"])
+            self.assertEqual(state["provider_status"], "not_configured")
+            self.assertIn("No platform Elsevier key", state["warning"])
+            get.assert_not_called()
+
+    def test_vip_pipeline_collects_scopus_records_with_platform_key(self):
+        result = response(payload={"search-results": {"entry": [{"dc:title": "Graphene research", "dc:creator": "Smith, J.", "prism:doi": "10.1000/graphene", "prism:coverDate": "2025-01-01"}], "opensearch:totalResults": "1"}})
+        with tempfile.TemporaryDirectory() as root:
+            pdf = Path(root, "report.pdf")
+            pdf.write_bytes(b"%PDF-test")
+            builder = Mock()
+            builder.finish.return_value = ([str(pdf)], [])
+            with patch.dict(os.environ, {"ELSEVIER_API_KEY": KEY}), patch.object(providers, "get_engine_circuit_status", return_value=None), patch.object(providers, "safe_get", return_value=result) as get, patch.object(app, "FETCH_BATCH_MAP", {"elsevier": providers.fetch_elsevier_batch}), patch.object(app, "DOWNLOAD_DIR", root), patch.object(app, "db_set_task"), patch.object(app, "ReportBuilder", return_value=builder):
+                try:
+                    app.process_pipeline("graphene", db_source="elsevier", limit=1, is_guest=False, uh="test-owner", task_id="vip-scopus-test")
+                    task = app.TASKS["vip-scopus-test"]
+                    self.assertEqual(task["status"], "completed", task.get("error"))
+                    self.assertEqual(len(task["papers"]), 1)
+                    self.assertEqual(task["papers"][0]["sources"], ["elsevier"])
+                    self.assertEqual(get.call_count, 1)
+                    self.assertFalse(get.call_args.args[3])
+                    self.assertNotIn(KEY, json.dumps(task))
+                finally:
+                    app.TASKS.pop("vip-scopus-test", None)
+
+    def test_vip_pipeline_reports_missing_key_without_repeating_collection(self):
+        with tempfile.TemporaryDirectory() as root, patch.dict(os.environ, {"ELSEVIER_API_KEY": ""}), patch.object(providers, "ELSEVIER_API_KEY", ""), patch.object(providers, "safe_get") as get, patch.object(app, "FETCH_BATCH_MAP", {"elsevier": providers.fetch_elsevier_batch}), patch.object(app, "DOWNLOAD_DIR", root), patch.object(app, "db_set_task"):
+            try:
+                app.process_pipeline("graphene", db_source="elsevier", limit=5, is_guest=False, uh="test-owner", task_id="vip-scopus-missing-test")
+                task = app.TASKS["vip-scopus-missing-test"]
+                self.assertEqual(task["status"], "error")
+                self.assertIn("No platform Elsevier key", task["error"])
+                self.assertEqual(task["provider_diagnostics"]["elsevier"]["status"], "not_configured")
+                self.assertEqual(task["provider_diagnostics"]["elsevier"]["returned"], 0)
+                get.assert_not_called()
+            finally:
+                app.TASKS.pop("vip-scopus-missing-test", None)
+
     def test_guest_never_falls_back_to_platform_secret(self):
         with patch.dict(os.environ, {"ELSEVIER_API_KEY": "PLATFORM_PRIVATE_KEY"}), patch.object(providers, "safe_get") as get:
             self.assertEqual(providers.fetch_elsevier_batch("climate", {}, "keyword", "", "", True, 25), [])
