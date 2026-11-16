@@ -1457,6 +1457,13 @@
       pollingRef.current = setInterval(async () => {
         try {
           const res = await fetch(`/api/status/${tid}`);
+          if (res.status === 403 || res.status === 404) {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            pollingRef.current = null;
+            setIsSearching(false); setStopDecision(null); setProgress(0);
+            showAlert(lang === "ar" ? "انقطعت صلاحية الجلسة أو المهمة غير موجودة. أعد المحاولة." : "Session expired or task not found. Please retry.", "error", 9000);
+            return;
+          }
           if (!res.ok) {
             const errText = await res.text();
             throw new Error(errText || (lang === "ar" ? "خطأ أثناء متابعة المهمة" : "Error polling task status"));
@@ -3117,7 +3124,7 @@
 
                     <div className="flex flex-wrap items-center gap-3 pt-1">
                       <a
-                        href=${downloadUrl}
+                        href=${(window.koAuthUrl ? window.koAuthUrl(downloadUrl) : downloadUrl)} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"
                         download=${filename || (fileType === "pdf" ? "Academic_Report.pdf" : "Academic_Archive.zip")}
                         className="inline-flex h-[44px] px-5 rounded-[12px] bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-black items-center gap-2 transition shadow-sm cursor-pointer"
                         title=${lang === "ar" ? "تحميل وتنزيل الملف مباشرة إلى جهازك" : "Download and save file directly to your device"}
@@ -3602,7 +3609,7 @@
                               👁️ ${lang === "ar" ? "النتائج" : "Results"}
                             </button>
                             <a
-                              href=${item.download_url}
+                              href=${(window.koAuthUrl ? window.koAuthUrl(item.download_url) : item.download_url)} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"
                               download=${item.filename}
                               className="inline-flex px-2.5 py-1 rounded-[8px] bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-sm transition cursor-pointer items-center gap-1"
                               title=${lang === "ar" ? "تحميل هذا الملف مباشرة إلى جهازك" : "Download file directly"}
@@ -3834,7 +3841,7 @@
 
               <div className="mt-6 flex flex-col gap-2">
                 <a
-                  href=${downloadUrl}
+                  href=${(window.koAuthUrl ? window.koAuthUrl(downloadUrl) : downloadUrl)} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"
                   download=${filename || (fileType === "pdf" ? "Academic_Report.pdf" : "Academic_Archive.zip")}
                   className="w-full h-[46px] rounded-[14px] bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-2 text-[14px] font-black transition shadow-sm cursor-pointer"
                   title=${lang === "ar" ? "تحميل وتنزيل الملف مباشرة إلى جهازك" : "Download file directly"}

@@ -35,7 +35,7 @@ def _decode(data: str) -> bytes:
     return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
 
 
-def issue_session(response: Response, owner: str, secure: bool) -> None:
+def make_token(owner: str) -> str:
     if not owner or len(owner) > 128 or any(c in owner for c in "/\\."):
         raise ValueError("Invalid owner")
     payload = _b64(json.dumps(
@@ -43,18 +43,38 @@ def issue_session(response: Response, owner: str, secure: bool) -> None:
         separators=(",", ":"), sort_keys=True
     ).encode("utf-8"))
     signature = _b64(hmac.new(_SECRET, payload.encode("ascii"), hashlib.sha256).digest())
+    return payload + "." + signature
+
+
+def issue_session(response: Response, owner: str, secure: bool) -> None:
+    token = make_token(owner)
+    # Hugging Face embeds Spaces in cross-site iframes; Lax cookies are not sent there.
+    secure = bool(secure or os.environ.get("SPACE_ID") or os.environ.get("HF_SPACE"))
     response.set_cookie(
-        COOKIE_NAME, payload + "." + signature,
-        max_age=MAX_AGE, httponly=True, secure=secure, samesite="lax", path="/"
+        COOKIE_NAME, token, max_age=MAX_AGE, httponly=True,
+        secure=secure, samesite="none" if secure else "lax", path="/"
     )
+    # Fallback for browsers that block third-party cookies. The client stores it in sessionStorage.
+    response.headers["X-KO-Session"] = token
+    response.headers["Cache-Control"] = "no-store"
 
 
 def revoke_session(response: Response) -> None:
-    response.delete_cookie(COOKIE_NAME, path="/")
+    secure = bool(os.environ.get("SPACE_ID") or os.environ.get("HF_SPACE"))
+    response.delete_cookie(
+        COOKIE_NAME, path="/", httponly=True, secure=secure,
+        samesite="none" if secure else "lax"
+    )
+    # Tell the same-origin fetch wrapper to discard its sessionStorage fallback.
+    response.headers["X-KO-Session-Revoked"] = "1"
+    response.headers["Cache-Control"] = "no-store"
 
 
 def session_owner(request: Request) -> str | None:
-    raw = request.cookies.get(COOKIE_NAME, "")
+    raw = request.cookies.get(COOKIE_NAME, "") or request.headers.get("x-ko-session", "")
+    # Query-string tokens are accepted only for direct file downloads, never for API mutations.
+    if not raw and request.url.path.startswith("/download/"):
+        raw = request.query_params.get("ko_session", "")
     if len(raw) > 1024 or raw.count(".") != 1:
         return None
     payload, signature = raw.split(".", 1)

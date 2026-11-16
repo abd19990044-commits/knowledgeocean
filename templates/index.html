@@ -65,6 +65,66 @@
       document.write('<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"><\/script>');
     }
   </script>
+<script>
+(function () {
+  var KEY = "ko_session_token";
+  var tok = "";
+  try { tok = sessionStorage.getItem(KEY) || ""; } catch (e) {}
+
+  var originalFetch = window.fetch.bind(window);
+
+  function requestUrl(input) {
+    try {
+      var raw = (typeof input === "string") ? input : (input && input.url) || "";
+      return new URL(raw, window.location.href);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  window.fetch = async function (input, init) {
+    var url = requestUrl(input);
+    var sameOrigin = !!url && url.origin === window.location.origin;
+    var nextInit = Object.assign({}, init || {});
+
+    if (tok && sameOrigin) {
+      var headers = new Headers(input && typeof input !== "string" && input.headers ? input.headers : undefined);
+      new Headers(nextInit.headers || {}).forEach(function (value, name) {
+        headers.set(name, value);
+      });
+      headers.set("X-KO-Session", tok);
+      nextInit.headers = headers;
+    }
+
+    var response = await originalFetch(input, nextInit);
+    if (sameOrigin) {
+      if (response.headers.get("X-KO-Session-Revoked") === "1") {
+        tok = "";
+        try { sessionStorage.removeItem(KEY); } catch (e) {}
+      } else {
+        var refreshed = response.headers.get("X-KO-Session");
+        if (refreshed) {
+          tok = refreshed;
+          try { sessionStorage.setItem(KEY, tok); } catch (e) {}
+        }
+      }
+    }
+    return response;
+  };
+
+  window.koAuthUrl = function (value) {
+    if (!tok || !value || value === "#") return value;
+    try {
+      var url = new URL(value, window.location.href);
+      if (url.origin !== window.location.origin || !url.pathname.startsWith("/download/")) return value;
+      url.searchParams.set("ko_session", tok);
+      return url.pathname + url.search + url.hash;
+    } catch (e) {
+      return value;
+    }
+  };
+})();
+</script>
 </head>
 <body class="min-h-screen relative text-[#0c0a09] dark:text-[#fcfaf8] transition-colors duration-300">
   
