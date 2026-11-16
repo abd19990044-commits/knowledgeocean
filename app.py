@@ -2721,7 +2721,7 @@ async def api_download_bibtex(request: Request):
         content=str(bib_text)[:50000].encode("utf-8"),
         media_type="application/x-bibtex; charset=utf-8",
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            "Content-Disposition": build_content_disposition("attachment", safe_name),
             "X-Content-Type-Options": "nosniff"
         }
     )
@@ -3642,6 +3642,23 @@ async def delete_file(request: Request):
     return JSONResponse(status_code=404, content={"error": "الملف غير موجود أو ليس لديك صلاحية لحذفه."})
 
 
+def build_content_disposition(disposition: str, filename: str) -> str:
+    """Build an RFC 6266 Content-Disposition value safe for Unicode filenames.
+
+    The legacy filename parameter is ASCII-only; filename* carries the UTF-8 name.
+    """
+    if disposition not in {"attachment", "inline"}:
+        raise ValueError("Unsupported Content-Disposition disposition")
+
+    filename = os.path.basename(str(filename)).replace("\\", "_").replace("/", "_")
+    stem, ext = os.path.splitext(filename)
+    ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._-") or "download"
+    ascii_ext = re.sub(r"[^A-Za-z0-9.]", "", ext)
+    ascii_name = (ascii_stem + ascii_ext)[:180] or "download"
+    encoded_name = urllib.parse.quote(filename, safe="")
+    return f'{disposition}; filename="{ascii_name}"; filename*=UTF-8\'\'{encoded_name}'
+
+
 @app.get("/download/{user_hash}/{filename}")
 async def download_file(user_hash: str, filename: str, request: Request, password: Optional[str] = None):
     require_owner(request, user_hash, local=is_local_instance(request))
@@ -3667,7 +3684,7 @@ async def download_file(user_hash: str, filename: str, request: Request, passwor
         filename=filename,
         media_type=media_type,
         headers={
-            "Content-Disposition": f'{disposition}; filename="{filename}"',
+            "Content-Disposition": build_content_disposition(disposition, filename),
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Expose-Headers": "Content-Disposition",
             "Cache-Control": "no-cache"

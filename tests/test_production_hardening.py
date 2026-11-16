@@ -40,6 +40,36 @@ class HardeningRegressionTests(unittest.TestCase):
             bad = Request({"type": "http", "method": "GET", "headers": [(b"cookie", forged.encode())]})
             self.assertIsNone(access_control.session_owner(bad))
 
+    def test_unicode_content_disposition_is_safe_for_http_headers(self):
+        import urllib.parse
+        import app
+        from starlette.responses import Response, FileResponse
+        import tempfile
+
+        filename = "Academic_Report_الذكاء_الاصطناعي_2026.pdf"
+        value = app.build_content_disposition("attachment", filename)
+
+        # Starlette/ASGI response headers must be encodable as latin-1.
+        self.assertTrue(value.isascii())
+        value.encode("latin-1")
+        self.assertIn('filename="', value)
+        self.assertIn("filename*=UTF-8''" + urllib.parse.quote(filename, safe=""), value)
+
+        # An explicit safe header must override FileResponse's automatic filename header.
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as temp:
+            temp.write(b"%PDF-1.4")
+            temp.flush()
+            response = FileResponse(
+                temp.name,
+                filename=filename,
+                headers={"Content-Disposition": value},
+            )
+            self.assertEqual(response.headers["content-disposition"], value)
+
+    def test_bibtex_download_uses_unicode_safe_content_disposition(self):
+        source = (ROOT / "app.py").read_text("utf-8")
+        self.assertIn('build_content_disposition("attachment", safe_name)', source)
+
     def test_no_insecure_fallback_passwords(self):
         text = (ROOT / "app.py").read_text("utf-8")
         self.assertIn('APP_PASSWORDS = set()', text)
