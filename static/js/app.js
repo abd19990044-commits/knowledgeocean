@@ -665,23 +665,39 @@
     return m;
   }
 
-  function getOrCreateGuestToken() {
-    try {
-      let token = localStorage.getItem("ko_guest_token");
-      if (!token || typeof token !== "string" || token.length < 10) {
-        const randArr = new Uint8Array(16);
-        if (window.crypto && window.crypto.getRandomValues) {
-          window.crypto.getRandomValues(randArr);
-          token = "gt_" + Date.now().toString(36) + "_" + Array.from(randArr, b => b.toString(16).padStart(2, '0')).join('');
-        } else {
-          token = "gt_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        }
-        localStorage.setItem("ko_guest_token", token);
-      }
-      return token;
-    } catch (_) {
-      return "gt_guest_token";
+  function createGuestToken() {
+    const randArr = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(randArr);
+      return "gt_" + Date.now().toString(36) + "_" + Array.from(randArr, b => b.toString(16).padStart(2, '0')).join('');
     }
+    return "gt_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  }
+
+  function getOrCreateGuestToken() {
+    let token = "";
+    try { token = localStorage.getItem("ko_guest_token") || ""; } catch (_) {}
+    if (token && token.length >= 10) return token;
+
+    try {
+      token = sessionStorage.getItem("ko_guest_token") || "";
+      if (token && token.length >= 10) return token;
+    } catch (_) {}
+
+    token = createGuestToken();
+    try {
+      localStorage.setItem("ko_guest_token", token);
+      return token;
+    } catch (_) {}
+
+    try {
+      sessionStorage.setItem("ko_guest_token", token);
+      return token;
+    } catch (_) {}
+
+    // Last-resort per-page identity when both browser storage APIs are unavailable.
+    window.__koGuestToken = window.__koGuestToken || token;
+    return window.__koGuestToken;
   }
 
   function App() {

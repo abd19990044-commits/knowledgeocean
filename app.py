@@ -24,6 +24,8 @@ import html
 import shutil
 import zipfile
 import hashlib
+import ipaddress
+from collections import deque
 import logging
 import threading
 import hmac
@@ -172,19 +174,97 @@ PREMIUM_LOCK = threading.Lock()
 GUEST_SEARCH_QUOTA = 50       # 50 standard searches or 25 with summaries for guests without password
 SECONDARY_SEARCH_QUOTA = 250  # 250 standard searches or 125 with summaries for secondary password users, renewed daily
 
+def _is_shared_peer(ip: str) -> bool:
+    """Return True when the app sees a non-public address, commonly an internal platform proxy."""
+    try:
+        return not ipaddress.ip_address(ip).is_global
+    except ValueError:
+        return False
+
+
+def _forwarded_client_ip(request: Request, trusted_proxies: set[str]) -> str:
+    """Resolve X-Forwarded-For from right to left, skipping only explicitly trusted proxies."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if not forwarded:
+        return ""
+    chain = [item.strip() for item in forwarded.split(",") if item.strip()]
+    for candidate in reversed(chain):
+        try:
+            parsed = ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        if parsed.compressed in trusted_proxies or candidate in trusted_proxies:
+            continue
+        return parsed.compressed
+    return ""
+
+
 def get_fingerprint(request: Request):
     client_host = request.client.host if request.client else "127.0.0.1"
-    # Only accept proxy-forwarded client addresses from explicitly trusted peers.
+    # Forwarded client IPs are trusted only when the immediate peer is explicitly configured.
     trusted = {x.strip() for x in os.environ.get("TRUSTED_PROXY_IPS", "").split(",") if x.strip()}
     raw_ip = client_host
     if client_host in trusted:
-        raw_ip = request.headers.get("cf-connecting-ip") or request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for") or client_host
+        raw_ip = request.headers.get("cf-connecting-ip") or request.headers.get("x-real-ip") or ""
+        if not raw_ip:
+            raw_ip = _forwarded_client_ip(request, trusted) or client_host
     ip = raw_ip.split(",")[0].strip()
+    try:
+        ip = ipaddress.ip_address(ip).compressed
+    except ValueError:
+        pass
+
     ua = request.headers.get("user-agent", "")
     al = request.headers.get("accept-language", "")
     ae = request.headers.get("accept-encoding", "")
-    browser_fp = hashlib.sha256(f"{ua}_{al}_{ae}".encode('utf-8')).hexdigest()
+    browser_fp = hashlib.sha256(f"{ua}_{al}_{ae}".encode("utf-8")).hexdigest()
+
+    # A private/loopback/CGNAT peer is shared infrastructure on hosted deployments,
+    # not a reliable visitor IP. Scope bans and IP-based safety quotas to the visitor token.
+    if _is_shared_peer(ip) and not is_local_instance(request):
+        token = request.headers.get("x-guest-token", "").strip()[:128]
+        identity = f"token:{token}" if token else f"fingerprint:{browser_fp}"
+        ip = "px_" + hashlib.sha256(f"{ip}|{identity}".encode("utf-8")).hexdigest()[:24]
     return ip, browser_fp
+
+
+# Process-wide sliding-window brake on invalid credentials, independent of visitor tokens.
+# It prevents token rotation from bypassing the per-visitor 24-hour ban.
+LOGIN_GLOBAL_FAIL_LIMIT = 40
+LOGIN_GLOBAL_WINDOW_SECONDS = 600
+_LOGIN_FAILS: "deque[float]" = deque()
+_LOGIN_FAILS_LOCK = threading.Lock()
+
+
+def register_login_failure() -> int:
+    """Record one failed credential attempt; return Retry-After seconds when throttled."""
+    now = time.time()
+    with _LOGIN_FAILS_LOCK:
+        cutoff = now - LOGIN_GLOBAL_WINDOW_SECONDS
+        while _LOGIN_FAILS and _LOGIN_FAILS[0] <= cutoff:
+            _LOGIN_FAILS.popleft()
+        if len(_LOGIN_FAILS) >= LOGIN_GLOBAL_FAIL_LIMIT:
+            return max(1, int(_LOGIN_FAILS[0] + LOGIN_GLOBAL_WINDOW_SECONDS - now) + 1)
+        _LOGIN_FAILS.append(now)
+    return 0
+
+
+def login_throttled_response(wait: int) -> JSONResponse:
+    minutes = max(1, (wait + 59) // 60)
+    return JSONResponse(
+        status_code=429,
+        headers={"Retry-After": str(wait)},
+        content={
+            "status": "error",
+            "retry_after": wait,
+            "error": (
+                f"محاولات إدخال رموز غير صحيحة كثيرة على المنصة حالياً. "
+                f"أعد المحاولة بعد {minutes} دقيقة. / Too many invalid access-code attempts; "
+                f"retry in {minutes} minute(s)."
+            ),
+        },
+    )
+
 
 def check_guest_search_quota(ip: str, browser_fp: str, units_to_consume: int = 1, is_other: bool = False, auto_renew: bool = False, guest_token: str = "") -> tuple[bool, int]:
     """
@@ -1958,7 +2038,10 @@ async def api_login(request: Request):
         return response
     else:
         # Invalid attempt
-        banned, attempts_left, rem = db_record_auth_attempt(ip, success=False)
+        wait = register_login_failure()
+            if wait:
+                return login_throttled_response(wait)
+            banned, attempts_left, rem = db_record_auth_attempt(ip, success=False)
         if banned:
             return JSONResponse(
                 status_code=403,
@@ -2100,6 +2183,9 @@ async def start_search(
     clean_pwd = (password or "").strip()
     if clean_pwd:
         if not (verify_password(clean_pwd) or verify_other_password(clean_pwd)):
+            wait = register_login_failure()
+            if wait:
+                return login_throttled_response(wait)
             banned, attempts_left, rem = db_record_auth_attempt(ip, success=False)
             if banned:
                 return JSONResponse(
@@ -2317,6 +2403,9 @@ async def api_doi_lookup(request: Request, doi: str = Form(None), password: str 
 
     if pwd and pwd.strip():
         if not (verify_password(pwd.strip()) or verify_other_password(pwd.strip())):
+            wait = register_login_failure()
+            if wait:
+                return login_throttled_response(wait)
             banned, attempts_left, rem = db_record_auth_attempt(ip, success=False)
             if banned:
                 return JSONResponse({"ok": False, "status": "banned", "error": "تم إدخال الرمز بشكل خاطئ 5 مرات متتالية! تم حظر عنوانك لـ 24 ساعة.", "remaining_seconds": int(rem)}, status_code=403)
@@ -2773,6 +2862,9 @@ async def api_find_doi(request: Request, title: str = Form(None), limit: int = F
 
     if pwd and pwd.strip():
         if not (verify_password(pwd.strip()) or verify_other_password(pwd.strip())):
+            wait = register_login_failure()
+            if wait:
+                return login_throttled_response(wait)
             banned, attempts_left, rem = db_record_auth_attempt(ip, success=False)
             if banned:
                 return JSONResponse({"ok": False, "status": "banned", "error": "تم إدخال الرمز بشكل خاطئ 5 مرات متتالية! تم حظر عنوانك لـ 24 ساعة.", "remaining_seconds": int(rem)}, status_code=403)

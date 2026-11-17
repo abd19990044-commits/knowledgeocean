@@ -87,12 +87,21 @@
     var sameOrigin = !!url && url.origin === window.location.origin;
     var nextInit = Object.assign({}, init || {});
 
-    if (tok && sameOrigin) {
+    if (sameOrigin) {
       var headers = new Headers(input && typeof input !== "string" && input.headers ? input.headers : undefined);
       new Headers(nextInit.headers || {}).forEach(function (value, name) {
         headers.set(name, value);
       });
-      headers.set("X-KO-Session", tok);
+      if (tok) headers.set("X-KO-Session", tok);
+
+      var guestToken = "";
+      try { guestToken = localStorage.getItem("ko_guest_token") || ""; } catch (e) {}
+      if (!guestToken) {
+        try { guestToken = sessionStorage.getItem("ko_guest_token") || ""; } catch (e) {}
+      }
+      if (guestToken && !headers.has("X-Guest-Token")) {
+        headers.set("X-Guest-Token", guestToken);
+      }
       nextInit.headers = headers;
     }
 
