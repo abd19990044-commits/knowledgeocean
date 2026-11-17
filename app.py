@@ -2039,9 +2039,9 @@ async def api_login(request: Request):
     else:
         # Invalid attempt
         wait = register_login_failure()
-            if wait:
-                return login_throttled_response(wait)
-            banned, attempts_left, rem = db_record_auth_attempt(ip, success=False)
+        if wait:
+            return login_throttled_response(wait)
+        banned, attempts_left, rem = db_record_auth_attempt(ip, success=False)
         if banned:
             return JSONResponse(
                 status_code=403,
